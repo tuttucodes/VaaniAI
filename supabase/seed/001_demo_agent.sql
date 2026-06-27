@@ -1,0 +1,6 @@
+-- Seed the demo agent with:
+--   npm run seed
+--
+-- The seed script creates or reuses a real Supabase Auth user first, then inserts
+-- the public profile and demo agent. That keeps the public.users -> auth.users
+-- foreign key intact.
