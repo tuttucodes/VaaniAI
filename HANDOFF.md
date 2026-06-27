@@ -10,10 +10,30 @@
 - `VAANI_DEMO_MODE` is explicit. With real provider env, `/api/health` reports demo mode off.
 - The repo is intended to be pushed to `https://github.com/tuttucodes/VaaniAI.git` for Netlify connection.
 - Production Netlify URL: `https://vaanivoice.netlify.app/`.
+- Latest pushed commit before the phone-listening patch: `c729321` (`Restyle marketing page and hide public stack details`).
+- Current local worktree includes a phone-listening fix ready for commit and deployment.
 
 ## Active Context Rule
 
 Read this file at the start of every future Vaani work session before editing or deploying. Treat it as the persistent project memory, then verify current git status because another agent or the user may have edited files.
+
+## Immediate User Goal
+
+The user wants the live product to actually work end to end:
+
+1. Public homepage sample agents should call a real phone number.
+2. The AI should hear caller speech, transcribe it, respond naturally, and store transcript/insights.
+3. The assistant should run through the live platform like a human user, create/test an agent, and place a call.
+4. The voice should feel semantic, human-like, and support Indian mixed speech/language switching as much as possible.
+
+Current blocker stack:
+
+- Vobiz call connects and speaks the first prompt.
+- The first real production call to the user's test phone number queued successfully and connected:
+  - call id: `efb9f6d0-a8b0-4636-a334-f070c0b742d1`
+  - provider call id: `151bc781-10dd-4ee7-8ca3-3e055e7fb0fb`
+- That call stored only the assistant greeting, no caller/user speech messages. So the phone provider did not send final speech to `/api/vobiz/demo-gather`, or the XML gather configuration was not good enough.
+- Gemini also failed with quota/prepay exhaustion, so natural AI replies are blocked until Google AI Studio billing/prepay is fixed.
 
 ## Verification Completed
 
@@ -32,8 +52,8 @@ Read this file at the start of every future Vaani work session before editing or
   - `/api/vobiz/demo-ring`
   - `/api/vobiz/demo-hangup`
 - Live Netlify homepage renders successfully with title `Vaani AI Voice` and no browser console warnings/errors.
-- Live Netlify `/api/health` currently returns HTTP 503 because Supabase, LiveKit, and Vobiz env vars are not set in Netlify yet.
-- Live Netlify `/api/public/demo-call` currently returns `Supabase is required for public demo calls.` No real call is placed until Netlify env is configured.
+- Live Netlify `/api/health` returned `ok:true`, `services_ready:true`, `real_calls_ready:true` after the user added env vars and redeployed.
+- Live Netlify `/api/public/demo-call` returned HTTP 201 and queued the first dental call.
 - Browser audit on 2026-06-27 captured `https://callvaani.tech/` and `https://vaanivoice.netlify.app/`. The public page has been restyled toward the CallVaani visual language and public UI copy has been scrubbed of provider-stack names.
 
 ## Public Marketing Direction
@@ -58,6 +78,15 @@ Current Vaani implementation:
 - LiveKit: configured; token creation works.
 - Vobiz: public demo calls use the XML callback flow through `/Account/{VOBIZ_AUTH_ID}/Call/` with `X-Auth-ID` and `X-Auth-Token`. Dashboard LiveKit/SIP bridge fields still need final Vobiz SIP mapping for full real-time audio into LiveKit.
 - Gemini generation is reachable but returned quota exhaustion during dental post-call QA. The app falls back to conservative transcript extraction so call records still get usable summaries/leads while provider quota is restored.
+- User supplied a new Gemini key:
+  - Local `.env` and `.env.local` were updated with the new key provided by the user. Do not commit or paste the raw key.
+  - Local `.env` and `.env.local` were also changed to `GEMINI_CHAT_MODEL=gemini-2.5-flash`.
+  - Smoke tests still returned HTTP 429:
+    - `gemini-2.0-flash-lite`: free-tier request/token quota limit is `0`
+    - `gemini-2.0-flash`: free-tier request/token quota limit is `0`
+    - `gemini-2.5-flash`: `Your prepayment credits are depleted`
+    - `gemini-flash-latest`: `Your prepayment credits are depleted`
+  - Therefore the key itself is visible/accepted, but the Google AI Studio project has no available prepay credits. The user must fix billing/prepay before high-end Gemini replies work.
 - LiveKit: Cloud project credentials work for token creation. For real phone-call audio with sub-second latency, keep LiveKit Cloud and deploy the voice worker as an always-on service on DigitalOcean/Fly/Render. Netlify functions are not suitable for a persistent LiveKit media worker.
 
 ## Important Files
@@ -73,6 +102,14 @@ Current Vaani implementation:
 - Vobiz adapter: `lib/telephony/vobiz.ts`
 - Public demo scenarios: `lib/public-demo/`
 - Public demo call form: `components/forms/public-demo-call-form.tsx`
+- Public demo XML: `lib/public-demo/xml.ts`
+- Public Vobiz callback routes:
+  - `app/api/vobiz/demo-answer/route.ts`
+  - `app/api/vobiz/demo-gather/route.ts`
+  - `app/api/vobiz/demo-hangup/route.ts`
+  - `app/api/vobiz/demo-ring/route.ts`
+  - `app/api/vobiz/demo-noinput/route.ts` 
+  - `app/api/vobiz/demo-interim/route.ts` 
 - Voice worker MVP: `workers/voice-agent.ts`
 - Migrations: `supabase/migrations/`
 - Seed script: `scripts/seed-demo.ts`
@@ -136,6 +173,12 @@ Required before the sample call can dial:
 - Redeploy the production site.
 - Confirm `https://vaanivoice.netlify.app/api/health` returns `ok: true` and `real_calls_ready: true`.
 
+Current Netlify env action needed:
+
+- The user must update Netlify `GEMINI_API_KEY` to the new key if they want production to use it. Codex cannot edit Netlify env unless the user logs in with Netlify CLI or provides a Netlify access token.
+- However, the new Gemini key currently returns `429 prepayment credits are depleted`, so updating Netlify alone will not make Gemini work until Google AI Studio billing/prepay is fixed.
+- Also set `GEMINI_CHAT_MODEL=gemini-2.5-flash` in Netlify for a better quality/latency balance.
+
 ## Public Demo Call Flow
 
 1. Visitor opens `/`.
@@ -146,6 +189,47 @@ Required before the sample call can dial:
 6. The app stores transcript turns, latency/cost estimates, and post-call insights.
 
 The public demo currently uses provider XML `<Speak>/<Gather>` callbacks for reliability and fast deployment. Do not mention this implementation detail in public marketing UI. The dashboard product flow still provisions LiveKit rooms and is ready for the always-on worker once the worker is hosted.
+
+## Phone Listening Fix
+
+Vobiz Gather docs confirmed:
+
+- `inputType="dtmf speech"` is valid.
+- `speechModel="telephony"` is supported and optimized for phone audio.
+- `language="en-IN"` is supported.
+- `interimSpeechResultsCallback` is supported for real-time partial speech callbacks.
+- Supported languages page lists English India (`en-IN`) but not full native Malayalam/Hindi/Tamil/Telugu/Kannada ASR codes for Gather. So XML Gather can improve Indian English and mixed English speech, but true all-Indian-language switching needs the LiveKit/Gemini streaming worker.
+
+Patch implemented locally:
+
+- `lib/public-demo/xml.ts`
+  - default language changed from `en-US` to `en-IN`
+  - Gather changed from `inputType="speech"` to `inputType="dtmf speech"`
+  - `speechModel` changed from `phone_call` to `telephony`
+  - `speechEndTimeout="2"`, `executionTimeout="22"`, `finishOnKey="#"`, `numDigits="1"`
+  - accepts optional `fallbackUrl` and `interimUrl`
+- `app/api/vobiz/demo-answer/route.ts`
+  - passes fallback URL `/api/vobiz/demo-noinput`
+  - passes interim URL `/api/vobiz/demo-interim`
+- `app/api/vobiz/demo-gather/route.ts`
+  - accepts more speech field variants: `Speech`, `speech`, `StableSpeech`, `stable_speech`, `Digits`, `digits`
+  - records DTMF fallback as user input
+  - passes confidence into prompt
+  - prompts Gemini to mirror Indian mixed speech naturally
+- Added `app/api/vobiz/demo-noinput/route.ts`
+  - records no-input as a system message
+  - retries once with a clearer prompt
+  - then hangs up gracefully if still unheard
+- Added `app/api/vobiz/demo-interim/route.ts`
+  - records interim speech as system messages for diagnostics
+
+Next steps:
+
+1. Commit and push the phone-listening fix.
+2. Wait for Netlify deploy.
+3. Retest public homepage dental call.
+4. If caller speech still does not appear, inspect interim/noinput system messages in Supabase for the new call.
+5. Fix Gemini in AI Studio billing/prepay, then update Netlify `GEMINI_API_KEY` and `GEMINI_CHAT_MODEL=gemini-2.5-flash`.
 
 ## Notes For Next Engineer
 

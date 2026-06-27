@@ -19,29 +19,39 @@ export function xmlResponse(xml: string) {
 export function speakGatherXml({
   message,
   actionUrl,
+  fallbackUrl,
+  interimUrl,
   hints,
-  language = "en-US"
+  language = "en-IN"
 }: {
   message: string;
   actionUrl: string;
+  fallbackUrl?: string;
+  interimUrl?: string;
   hints?: string;
   language?: string;
 }) {
+  const interimAttributes = interimUrl
+    ? ` interimSpeechResultsCallback="${escapeXml(interimUrl)}" interimSpeechResultsCallbackMethod="POST"`
+    : "";
+  const fallback = fallbackUrl
+    ? `<Redirect method="POST">${escapeXml(fallbackUrl)}</Redirect>`
+    : `<Speak voice="WOMAN" language="${escapeXml(language)}">I did not catch that. I will end the demo call now. Thank you.</Speak>
+  <Hangup/>`;
+
   return xmlResponse(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Gather action="${escapeXml(actionUrl)}" method="POST" inputType="speech" language="${escapeXml(language)}" speechModel="phone_call" speechEndTimeout="auto" executionTimeout="12" hints="${escapeXml(hints || "")}">
+  <Gather action="${escapeXml(actionUrl)}" method="POST" inputType="dtmf speech" language="${escapeXml(language)}" speechModel="telephony" speechEndTimeout="2" digitEndTimeout="3" finishOnKey="#" numDigits="1" executionTimeout="22" hints="${escapeXml(hints || "")}" log="true"${interimAttributes}>
     <Speak voice="WOMAN" language="${escapeXml(language)}">${escapeXml(message)}</Speak>
   </Gather>
-  <Speak voice="WOMAN" language="${escapeXml(language)}">I did not catch that. I will end the demo call now. Thank you.</Speak>
-  <Hangup/>
+  ${fallback}
 </Response>`);
 }
 
-export function speakHangupXml(message: string, language = "en-US") {
+export function speakHangupXml(message: string, language = "en-IN") {
   return xmlResponse(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Speak voice="WOMAN" language="${escapeXml(language)}">${escapeXml(message)}</Speak>
   <Hangup/>
 </Response>`);
 }
-

@@ -39,9 +39,10 @@ export async function POST(request: NextRequest) {
   return speakGatherXml({
     message: fillTemplate(scenario.firstPrompt, { name, use_case: useCase }),
     actionUrl: `${baseUrl}/api/vobiz/demo-gather?${params.toString()}`,
+    fallbackUrl: `${baseUrl}/api/vobiz/demo-noinput?${params.toString()}`,
+    interimUrl: `${baseUrl}/api/vobiz/demo-interim?${params.toString()}`,
     hints: scenario.hints
   });
 }
 
 export const GET = POST;
-

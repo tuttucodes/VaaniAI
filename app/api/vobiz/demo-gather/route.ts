@@ -30,7 +30,17 @@ export async function POST(request: NextRequest) {
   const baseUrl = publicBaseUrl(request);
   const scenario = getDemoScenario(scenarioId);
   const form = await request.formData().catch(() => null);
-  const speech = String(form?.get("Speech") || form?.get("Digits") || "").trim();
+  const speech = String(
+    form?.get("Speech") ||
+      form?.get("speech") ||
+      form?.get("StableSpeech") ||
+      form?.get("stable_speech") ||
+      form?.get("Digits") ||
+      form?.get("digits") ||
+      ""
+  ).trim();
+  const inputType = String(form?.get("InputType") || form?.get("input_type") || "").toLowerCase();
+  const confidence = Number(form?.get("SpeechConfidenceScore") || form?.get("speech_confidence_score") || 0);
 
   const supabase = createSupabaseAdminClient();
   const { data: call } = supabase && callId ? await supabase.from("calls").select("agent_id").eq("id", callId).single() : { data: null };
@@ -40,7 +50,7 @@ export async function POST(request: NextRequest) {
       call_id: callId,
       agent_id: call.agent_id,
       role: "user",
-      content: speech,
+      content: inputType === "dtmf" ? `Pressed ${speech}` : speech,
       latency_ms: 0
     });
   }
@@ -56,11 +66,12 @@ export async function POST(request: NextRequest) {
 Caller name: ${name}
 Landing-page use case: ${useCase}
 Latest caller utterance: ${speech || "(no speech detected)"}
+Speech confidence: ${confidence || "unknown"}
 
-Reply in one or two short spoken sentences. If this is turn ${turn} or later, gently summarize what you captured and say the team will follow up.`
+Reply in one or two short spoken sentences. Mirror Indian English naturally. If the caller mixes English with Malayalam, Hindi, Tamil, Telugu, or Kannada words, acknowledge naturally in simple English or the same mixed style. Ask only one question at a time. If this is turn ${turn} or later, gently summarize what you captured and say the team will follow up.`
         }
       ],
-      { temperature: 0.35, maxOutputTokens: 120 }
+      { temperature: 0.45, maxOutputTokens: 140 }
     );
   } catch {
     reply = fallbackReply({ speech, name, scenario });
@@ -125,9 +136,10 @@ Reply in one or two short spoken sentences. If this is turn ${turn} or later, ge
   return speakGatherXml({
     message: reply,
     actionUrl: `${baseUrl}/api/vobiz/demo-gather?${params.toString()}`,
+    fallbackUrl: `${baseUrl}/api/vobiz/demo-noinput?${params.toString()}`,
+    interimUrl: `${baseUrl}/api/vobiz/demo-interim?${params.toString()}`,
     hints: scenario.hints
   });
 }
 
 export const GET = POST;
-
