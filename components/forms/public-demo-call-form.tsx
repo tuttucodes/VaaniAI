@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Building2, CalendarClock, Headset, Home, PhoneCall, Utensils } from "lucide-react";
+import { CalendarClock, Headset, Home, PhoneCall, Utensils } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -59,13 +59,15 @@ export function PublicDemoCallForm() {
               type="button"
               onClick={() => setScenario(item.id)}
               className={cn(
-                "group rounded-md border p-4 text-left transition-colors",
-                selected ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card hover:border-primary/50"
+                "group rounded-2xl border p-4 text-left transition-all",
+                selected
+                  ? "border-[#120a19] bg-[#120a19] text-white shadow-[0_18px_36px_rgba(18,10,25,0.18)]"
+                  : "border-black/10 bg-[#fbfbfb] text-[#120a19] hover:border-[#c58be2]"
               )}
             >
-              <Icon className="mb-6 size-5" />
+              <Icon className={cn("mb-6 size-5", selected ? "text-[#e8b9ff]" : "text-[#8f4ead]")} />
               <div className="text-sm font-semibold">{item.title}</div>
-              <p className={cn("mt-2 text-xs leading-5", selected ? "text-primary-foreground/82" : "text-muted-foreground")}>
+              <p className={cn("mt-2 text-xs leading-5", selected ? "text-white/72" : "text-[#746a7a]")}>
                 {item.subtitle}
               </p>
             </button>
@@ -74,32 +76,37 @@ export function PublicDemoCallForm() {
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">
-        <label className="grid gap-2 text-sm font-medium">
+        <label className="grid gap-2 text-sm font-semibold text-[#241a2c]">
           Your name
-          <Input name="name" placeholder="Rahul" required />
+          <Input name="name" placeholder="Rahul" className="h-12 border-black/15 bg-white text-base" required />
         </label>
-        <label className="grid gap-2 text-sm font-medium">
+        <label className="grid gap-2 text-sm font-semibold text-[#241a2c]">
           Phone number
-          <Input name="phone_number" placeholder="+919876543210" required />
+          <Input name="phone_number" placeholder="+919876543210" className="h-12 border-black/15 bg-white text-base" required />
         </label>
       </div>
 
-      <label className="grid gap-2 text-sm font-medium">
+      <label className="grid gap-2 text-sm font-semibold text-[#241a2c]">
         What should the agent help with?
         <Textarea
           name="use_case"
-          className="min-h-28"
+          className="min-h-28 border-black/15 bg-white text-base"
           placeholder="Example: I want to book a dental appointment tomorrow evening for tooth sensitivity."
           required
         />
       </label>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <Button type="submit" size="lg" disabled={isPending} className="w-full sm:w-auto">
+        <Button
+          type="submit"
+          size="lg"
+          disabled={isPending}
+          className="h-12 w-full rounded-md bg-[#e8b9ff] px-6 font-semibold text-[#120719] shadow-[0_14px_32px_rgba(189,109,232,0.25)] hover:bg-[#dca3fb] sm:w-auto"
+        >
           <PhoneCall data-icon="inline-start" />
           {isPending ? "Calling..." : "Call me now"}
         </Button>
-        {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
+        {message ? <p className="text-sm leading-6 text-[#5e5366]">{message}</p> : null}
       </div>
     </form>
   );
@@ -107,32 +114,30 @@ export function PublicDemoCallForm() {
 
 export function DemoSignalPanel() {
   return (
-    <div className="relative overflow-hidden rounded-md border bg-card p-5 shadow-panel">
+    <div className="relative overflow-hidden rounded-[28px] border border-black/10 bg-white/88 p-6 shadow-[0_24px_70px_rgba(28,14,40,0.12)] backdrop-blur">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <div className="text-sm font-semibold">Live call path</div>
-          <div className="text-xs text-muted-foreground">Vobiz voice XML today, LiveKit SIP worker for realtime mode</div>
+          <div className="text-sm font-semibold text-[#120a19]">Call journey</div>
+          <div className="text-xs text-[#746a7a]">From dial to transcript in one clean loop</div>
         </div>
-        <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
+        <div className="flex size-10 items-center justify-center rounded-2xl bg-[#120a19] text-[#e8b9ff]">
           <Headset className="size-5" />
         </div>
       </div>
       <div className="grid gap-3">
-        {["Call queued", "Answer XML", "Speech gather", "Agent response", "Transcript saved"].map((step, index) => (
-          <div key={step} className="flex items-center gap-3 rounded-md border bg-background p-3">
-            <div className="flex size-7 items-center justify-center rounded-md bg-secondary text-xs font-semibold">{index + 1}</div>
-            <div className="text-sm">{step}</div>
-            <div className="ml-auto h-2 w-16 rounded-full bg-secondary">
-              <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, 32 + index * 15)}%` }} />
+        {["Call placed", "Caller heard", "Intent understood", "Answer spoken", "Transcript saved"].map((step, index) => (
+          <div key={step} className="flex items-center gap-3 rounded-2xl border border-black/10 bg-[#fbfbfb] p-3">
+            <div className="flex size-7 items-center justify-center rounded-xl bg-[#efcdfd] text-xs font-semibold text-[#120a19]">{index + 1}</div>
+            <div className="text-sm text-[#241a2c]">{step}</div>
+            <div className="ml-auto h-2 w-16 rounded-full bg-black/10">
+              <div className="h-full rounded-full bg-[#8f4ead]" style={{ width: `${Math.min(100, 32 + index * 15)}%` }} />
             </div>
           </div>
         ))}
       </div>
-      <div className="mt-6 rounded-md bg-muted p-3 text-xs leading-5 text-muted-foreground">
-        For production realtime calls, run the LiveKit agent worker as an always-on service beside this web app.
+      <div className="mt-6 rounded-2xl bg-[#f4e8fb] p-4 text-xs leading-5 text-[#5d5364]">
+        Every completed call can produce a transcript, lead summary, unanswered questions, and suggested learnings for approval.
       </div>
-      <Building2 className="absolute -bottom-6 -right-5 size-28 text-primary/10" />
     </div>
   );
 }
-

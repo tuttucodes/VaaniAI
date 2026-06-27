@@ -51,7 +51,7 @@ export function KnowledgeUploadForm({ agents, selectedAgentId }: { agents: Agent
         <Field>
           <FieldLabel htmlFor="file">Knowledge file</FieldLabel>
           <Input id="file" name="file" type="file" accept=".pdf,.doc,.docx,.txt,.csv,.xlsx" required />
-          <FieldDescription>Files are parsed and chunked before calls. RAG retrieves only top matching chunks live.</FieldDescription>
+          <FieldDescription>Files are prepared before calls. Live answers use only the best matching context.</FieldDescription>
         </Field>
         <Button type="submit" disabled={isPending || agents.length === 0}>
           <Upload data-icon="inline-start" />

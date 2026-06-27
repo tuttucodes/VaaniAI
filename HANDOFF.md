@@ -3,13 +3,17 @@
 ## Current Status
 
 - Next.js MVP is implemented with dashboard pages, API routes, Supabase persistence, LiveKit room/token plumbing, Gemini text/embedding helpers, document upload/parsing, hybrid pgvector RAG, call history, insights, leads, memory approval, export/delete, and Vobiz provider abstraction.
-- Public landing page is implemented at `/` with three sample AI agents. A visitor can enter name, phone number, and use case, then trigger a Vobiz XML callback demo call.
+- Public landing page is implemented at `/` with three sample AI agents. A visitor can enter name, phone number, and use case, then trigger a Vaani demo call.
 - Supabase migrations have been applied to the configured project.
 - Demo auth user and `Sales Demo Agent` have been seeded with `npm run seed`.
 - Local dev server is expected at `http://localhost:3000`.
 - `VAANI_DEMO_MODE` is explicit. With real provider env, `/api/health` reports demo mode off.
 - The repo is intended to be pushed to `https://github.com/tuttucodes/VaaniAI.git` for Netlify connection.
 - Production Netlify URL: `https://vaanivoice.netlify.app/`.
+
+## Active Context Rule
+
+Read this file at the start of every future Vaani work session before editing or deploying. Treat it as the persistent project memory, then verify current git status because another agent or the user may have edited files.
 
 ## Verification Completed
 
@@ -30,6 +34,22 @@
 - Live Netlify homepage renders successfully with title `Vaani AI Voice` and no browser console warnings/errors.
 - Live Netlify `/api/health` currently returns HTTP 503 because Supabase, LiveKit, and Vobiz env vars are not set in Netlify yet.
 - Live Netlify `/api/public/demo-call` currently returns `Supabase is required for public demo calls.` No real call is placed until Netlify env is configured.
+- Browser audit on 2026-06-27 captured `https://callvaani.tech/` and `https://vaanivoice.netlify.app/`. The public page has been restyled toward the CallVaani visual language and public UI copy has been scrubbed of provider-stack names.
+
+## Public Marketing Direction
+
+Reference captured from `https://callvaani.tech/`:
+
+- Floating rounded top navigation with compact brand mark, simple section links, and a soft purple CTA.
+- Editorial hero composition: large high-contrast serif headline, pastel blue/pink wash background, restrained body copy, and a latency proof card.
+- Public positioning emphasizes human, India-native, code-switching phone agents. It does not reveal infrastructure provider names.
+- First viewport includes a direct demo/sandbox CTA and visible live-latency proof.
+
+Current Vaani implementation:
+
+- Public home page uses a soft pastel background, floating pill nav, serif hero heading, latency proof card, code-switch examples, and an embedded sample-call form.
+- Public UI avoids names of infrastructure providers and uses product terms such as voice route, phone calling, call journey, and knowledge retrieval.
+- Keep technical provider details in README/HANDOFF/dashboard admin context only, not in public marketing copy.
 
 ## Provider Readiness
 
@@ -77,7 +97,16 @@ set -a; source .env.local; set +a
 
 ## Netlify Deployment
 
-Connect the GitHub repo in Netlify, set the build command to `npm run build`, and use the included `netlify.toml`. Add these environment variables in Netlify before the first production deploy:
+Connect the GitHub repo in Netlify, set the build command to `npm run build`, and use the included `netlify.toml`. Add these environment variables in Netlify before the first production deploy.
+
+Netlify UI path:
+
+1. Open the Netlify site.
+2. Go to `Site configuration`.
+3. Open `Environment variables`.
+4. Click `Add variable`.
+5. Add each key below for the production context.
+6. Save, then trigger a fresh production deploy.
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL
@@ -105,18 +134,18 @@ Required before the sample call can dial:
 
 - Add all env vars above in Netlify Site settings.
 - Redeploy the production site.
-- Confirm `https://vaanivoice.netlify.app/api/health` returns `ok: true` with Supabase, Gemini, LiveKit, and Vobiz ready.
+- Confirm `https://vaanivoice.netlify.app/api/health` returns `ok: true` and `real_calls_ready: true`.
 
 ## Public Demo Call Flow
 
 1. Visitor opens `/`.
 2. Visitor picks Dental Reception, Real Estate Qualifier, or Restaurant Host.
 3. Visitor enters name, E.164 phone number, and use case.
-4. `/api/public/demo-call` validates input, creates a demo call row, and asks Vobiz to call the phone number.
-5. Vobiz calls back into `/api/vobiz/demo-answer`, `/api/vobiz/demo-gather`, and `/api/vobiz/demo-hangup`.
+4. `/api/public/demo-call` validates input, creates a demo call row, and asks the telephony provider to call the phone number.
+5. The provider calls back into `/api/vobiz/demo-answer`, `/api/vobiz/demo-gather`, and `/api/vobiz/demo-hangup`.
 6. The app stores transcript turns, latency/cost estimates, and post-call insights.
 
-The public demo currently uses Vobiz XML `<Speak>/<Gather>` callbacks for reliability and fast deployment. The dashboard product flow still provisions LiveKit rooms and is ready for the always-on worker once the worker is hosted.
+The public demo currently uses provider XML `<Speak>/<Gather>` callbacks for reliability and fast deployment. Do not mention this implementation detail in public marketing UI. The dashboard product flow still provisions LiveKit rooms and is ready for the always-on worker once the worker is hosted.
 
 ## Notes For Next Engineer
 

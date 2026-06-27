@@ -19,7 +19,7 @@ async function findAuthUserByEmail(email: string) {
 
 export async function ensurePublicDemoUser() {
   const supabase = createSupabaseAdminClient();
-  if (!supabase) throw new Error("Supabase is required for public demo calls.");
+  if (!supabase) throw new Error("Calling is not fully configured yet.");
 
   const email = process.env.PUBLIC_DEMO_USER_EMAIL || process.env.SEED_USER_EMAIL || "demo@vaani.local";
   const password = process.env.PUBLIC_DEMO_USER_PASSWORD || process.env.SEED_USER_PASSWORD || "VaaniDemo123!";
@@ -42,7 +42,7 @@ export async function ensurePublicDemoUser() {
 
 export async function ensurePublicDemoAgents() {
   const supabase = createSupabaseAdminClient();
-  if (!supabase) throw new Error("Supabase is required for public demo calls.");
+  if (!supabase) throw new Error("Calling is not fully configured yet.");
 
   const user = await ensurePublicDemoUser();
   const agents = [];
@@ -81,7 +81,7 @@ export async function ensurePublicDemoAgents() {
 
 export async function getPublicDemoAgent(scenarioId: DemoScenarioId) {
   const supabase = createSupabaseAdminClient();
-  if (!supabase) throw new Error("Supabase is required for public demo calls.");
+  if (!supabase) throw new Error("Calling is not fully configured yet.");
 
   const scenario = getDemoScenario(scenarioId);
   const { user } = await ensurePublicDemoAgents();
@@ -95,4 +95,3 @@ export async function getPublicDemoAgent(scenarioId: DemoScenarioId) {
 
   return { user, agent: data, scenario };
 }
-

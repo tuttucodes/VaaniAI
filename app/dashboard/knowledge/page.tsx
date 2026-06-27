@@ -23,7 +23,7 @@ export default async function KnowledgePage() {
       <Card>
         <CardHeader>
           <CardTitle>Knowledge files</CardTitle>
-          <CardDescription>Hybrid pgvector and keyword retrieval filters by agent.</CardDescription>
+          <CardDescription>Fast semantic and keyword retrieval filtered by agent.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>

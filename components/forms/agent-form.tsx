@@ -168,7 +168,7 @@ export function AgentForm({ agent }: { agent?: Agent }) {
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="vobiz_phone_number">Vobiz phone number / SIP</FieldLabel>
+                <FieldLabel htmlFor="vobiz_phone_number">Phone number / voice route</FieldLabel>
                 <Input
                   id="vobiz_phone_number"
                   name="vobiz_phone_number"
@@ -178,12 +178,12 @@ export function AgentForm({ agent }: { agent?: Agent }) {
               </Field>
             </div>
             <Field>
-              <FieldLabel htmlFor="vobiz_sip_config">Vobiz SIP config JSON or notes</FieldLabel>
+              <FieldLabel htmlFor="vobiz_sip_config">Voice routing config or notes</FieldLabel>
               <Textarea
                 id="vobiz_sip_config"
                 name="vobiz_sip_config"
                 defaultValue={String(agent?.vobiz_config?.sipConfig || "")}
-                placeholder="TODO after Vobiz SIP bridge details are confirmed"
+                placeholder="Add routing details, fallback notes, or leave blank for the workspace default."
               />
             </Field>
             <div className="grid gap-4 lg:grid-cols-2">

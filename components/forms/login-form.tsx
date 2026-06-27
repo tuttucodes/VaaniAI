@@ -60,7 +60,7 @@ export function LoginForm() {
     <Card className="w-full max-w-md">
       <CardHeader>
         <CardTitle>Sign in</CardTitle>
-        <CardDescription>Use Supabase Auth, or continue into demo mode when env vars are empty.</CardDescription>
+        <CardDescription>Access your agents, calls, transcripts, leads, and approved memory.</CardDescription>
       </CardHeader>
       <form>
         <CardContent>
@@ -72,7 +72,7 @@ export function LoginForm() {
             <Field>
               <FieldLabel htmlFor="password">Password</FieldLabel>
               <Input id="password" name="password" type="password" minLength={6} required />
-              <FieldDescription>Supabase email/password auth is used when configured.</FieldDescription>
+              <FieldDescription>Use your workspace email and password.</FieldDescription>
             </Field>
             {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
           </FieldGroup>

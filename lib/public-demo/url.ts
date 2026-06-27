@@ -12,10 +12,9 @@ export function publicBaseUrl(request: Request) {
 
 export function assertPublicHttpsUrl(baseUrl: string) {
   if (!baseUrl.startsWith("https://")) {
-    throw new Error("Public demo calls require NEXT_PUBLIC_APP_URL to be a public HTTPS URL.");
+    throw new Error("Demo calls require a public HTTPS app URL.");
   }
   if (baseUrl.includes("localhost") || baseUrl.includes("127.0.0.1")) {
-    throw new Error("Vobiz cannot call localhost callbacks. Deploy first or use a public HTTPS tunnel.");
+    throw new Error("Demo calls need a deployed public callback URL.");
   }
 }
-

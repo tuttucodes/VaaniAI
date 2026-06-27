@@ -26,7 +26,7 @@ export default async function AgentDetailPage({ params }: { params: Promise<{ id
           <Card>
             <CardHeader>
               <CardTitle>Outbound test</CardTitle>
-              <CardDescription>Creates a LiveKit room and asks Vobiz to bridge the phone call.</CardDescription>
+              <CardDescription>Starts a test room and places a phone call through your workspace route.</CardDescription>
             </CardHeader>
             <CardContent>
               <StartCallForm agentId={agent.id} />
@@ -46,9 +46,9 @@ export default async function AgentDetailPage({ params }: { params: Promise<{ id
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader>
-            <CardTitle>Knowledge files</CardTitle>
-            <CardDescription>Ready files are eligible for hybrid RAG.</CardDescription>
+            <CardHeader>
+              <CardTitle>Knowledge files</CardTitle>
+              <CardDescription>Ready files are eligible for fast knowledge retrieval.</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>

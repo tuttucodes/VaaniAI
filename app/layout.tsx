@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Vaani AI Voice",
-  description: "Low-latency AI voice agent platform with LiveKit, Gemini, Supabase, and Vobiz."
+  description: "Low-latency, multilingual AI phone agents for real business calls."
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

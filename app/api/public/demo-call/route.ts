@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
-import { ok, fail, handleApiError } from "@/lib/api";
+import { ZodError } from "zod";
+import { ok, fail } from "@/lib/api";
 import { publicDemoCallSchema } from "@/lib/validation";
 import { rateLimit } from "@/lib/rate-limit";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
@@ -17,7 +18,7 @@ export async function POST(request: NextRequest) {
     assertPublicHttpsUrl(baseUrl);
 
     const supabase = createSupabaseAdminClient();
-    if (!supabase) throw new Error("Supabase is required for public demo calls.");
+    if (!supabase) throw new Error("Calling is not fully configured yet.");
 
     const { user, agent, scenario } = await getPublicDemoAgent(input.scenario);
     const { data: call, error: callError } = await supabase
@@ -62,13 +63,31 @@ export async function POST(request: NextRequest) {
         summary:
           telephony.status === "queued"
             ? `Public demo call queued: ${scenario.title} for ${input.name}.`
-            : `Public demo call could not be placed. ${JSON.stringify(telephony.raw || telephony.todo || {})}`
+            : "Public demo call could not be placed. Calling setup needs attention."
       })
       .eq("id", call.id);
 
-    return ok({ call_id: call.id, scenario: scenario.id, telephony }, { status: telephony.status === "queued" ? 201 : 502 });
+    return ok(
+      {
+        call_id: call.id,
+        scenario: scenario.id,
+        status: telephony.status === "queued" ? "queued" : "unavailable",
+        message:
+          telephony.status === "queued"
+            ? "Your demo call is queued."
+            : "We could not place the demo call right now. Please try again shortly."
+      },
+      { status: telephony.status === "queued" ? 201 : 502 }
+    );
   } catch (error) {
-    return handleApiError(error);
+    if (error instanceof ZodError) {
+      return fail("Invalid request", 422, error.flatten());
+    }
+
+    if (error instanceof Error && error.message === "Calling is not fully configured yet.") {
+      return fail("Calling is not available yet.", 503);
+    }
+
+    return fail("We could not start the demo call right now.", 500);
   }
 }
-

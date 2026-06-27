@@ -9,7 +9,7 @@ export default function LoginPage() {
           <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">V</div>
           <div>
             <div className="font-semibold">Vaani AI Voice</div>
-            <div className="text-sm text-muted-foreground">LiveKit, Gemini, Vobiz, Supabase</div>
+            <div className="text-sm text-muted-foreground">Human phone agents for Indian teams</div>
           </div>
         </div>
         <div className="max-w-2xl">
@@ -21,7 +21,7 @@ export default function LoginPage() {
         </div>
         <div className="grid grid-cols-3 gap-3 text-sm text-muted-foreground">
           <div>Target under 300 ms perceived latency</div>
-          <div>RAG prefetch on partial transcripts</div>
+          <div>Knowledge prefetch on partial transcripts</div>
           <div>Cost controls under ₹2-₹3 per minute</div>
         </div>
       </section>

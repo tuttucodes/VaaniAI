@@ -4,7 +4,7 @@ Vapi-style AI voice agent MVP built with Next.js, Supabase, pgvector, LiveKit, G
 
 Production URL: [https://vaanivoice.netlify.app](https://vaanivoice.netlify.app)
 
-The home page also includes a public sample-call funnel: enter a name, phone number, choose one of three demo agents, and Vobiz calls the number with an AI receptionist-style experience.
+The home page also includes a public sample-call funnel: enter a name, phone number, choose one of three demo agents, and Vaani calls the number with an AI receptionist-style experience.
 
 ## Architecture
 

@@ -54,7 +54,7 @@ export default async function DashboardPage() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-sm font-medium">Live audio path</div>
-                  <div className="text-xs text-muted-foreground">LiveKit room to Gemini to TTS</div>
+                  <div className="text-xs text-muted-foreground">Caller audio to spoken response</div>
                 </div>
                 <Badge variant="secondary">MVP</Badge>
               </div>
@@ -90,7 +90,7 @@ export default async function DashboardPage() {
 
       <section className="grid gap-4 md:grid-cols-3">
         <MetricTile title="Avg response latency" value={`${avgLatency} ms`} detail="Speech end to first audio target: under 300 ms" progress={91} />
-        <MetricTile title="Estimated spend" value={formatInr(totalCost)} detail="Economy mode keeps prompt and RAG context compact" progress={42} />
+        <MetricTile title="Estimated spend" value={formatInr(totalCost)} detail="Economy mode keeps prompts and context compact" progress={42} />
         <MetricTile title="Completed calls" value={String(completedCalls.length)} detail="Post-call insights run after hangup" progress={65} />
       </section>
 

@@ -16,7 +16,7 @@ export default async function AgentsPage() {
       <CardHeader className="flex-row items-center justify-between gap-4">
         <div>
           <CardTitle>Agents</CardTitle>
-          <CardDescription>Configure prompts, latency modes, Vobiz settings, and knowledge retrieval.</CardDescription>
+          <CardDescription>Configure prompts, latency modes, phone routing, and knowledge retrieval.</CardDescription>
         </div>
         <Button asChild>
           <Link href="/dashboard/agents/new">
