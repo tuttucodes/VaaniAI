@@ -9,6 +9,7 @@
 - Local dev server is expected at `http://localhost:3000`.
 - `VAANI_DEMO_MODE` is explicit. With real provider env, `/api/health` reports demo mode off.
 - The repo is intended to be pushed to `https://github.com/tuttucodes/VaaniAI.git` for Netlify connection.
+- Production Netlify URL: `https://vaanivoice.netlify.app/`.
 
 ## Verification Completed
 
@@ -26,6 +27,9 @@
   - `/api/vobiz/demo-gather`
   - `/api/vobiz/demo-ring`
   - `/api/vobiz/demo-hangup`
+- Live Netlify homepage renders successfully with title `Vaani AI Voice` and no browser console warnings/errors.
+- Live Netlify `/api/health` currently returns HTTP 503 because Supabase, LiveKit, and Vobiz env vars are not set in Netlify yet.
+- Live Netlify `/api/public/demo-call` currently returns `Supabase is required for public demo calls.` No real call is placed until Netlify env is configured.
 
 ## Provider Readiness
 
@@ -95,7 +99,13 @@ DEFAULT_FROM_NUMBER
 NEXT_PUBLIC_APP_URL=https://<your-netlify-domain>
 ```
 
-After Netlify gives the final production URL, update `NEXT_PUBLIC_APP_URL` to that exact HTTPS URL and redeploy. Vobiz callback URLs for the public demo depend on that value.
+Set `NEXT_PUBLIC_APP_URL=https://vaanivoice.netlify.app` and redeploy. Vobiz callback URLs for the public demo depend on that value.
+
+Required before the sample call can dial:
+
+- Add all env vars above in Netlify Site settings.
+- Redeploy the production site.
+- Confirm `https://vaanivoice.netlify.app/api/health` returns `ok: true` with Supabase, Gemini, LiveKit, and Vobiz ready.
 
 ## Public Demo Call Flow
 

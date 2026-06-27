@@ -2,6 +2,8 @@
 
 Vapi-style AI voice agent MVP built with Next.js, Supabase, pgvector, LiveKit, Gemini, and a clean Vobiz telephony adapter.
 
+Production URL: [https://vaanivoice.netlify.app](https://vaanivoice.netlify.app)
+
 The home page also includes a public sample-call funnel: enter a name, phone number, choose one of three demo agents, and Vobiz calls the number with an AI receptionist-style experience.
 
 ## Architecture
@@ -141,7 +143,7 @@ The repo includes `netlify.toml` and `@netlify/plugin-nextjs`.
 2. In Netlify, import the GitHub repo.
 3. Use `npm run build` as the build command. Netlify will read the publish/plugin settings from `netlify.toml`.
 4. Add the production environment variables from `.env.example`.
-5. Set `NEXT_PUBLIC_APP_URL` to the final Netlify HTTPS URL and redeploy.
+5. Set `NEXT_PUBLIC_APP_URL=https://vaanivoice.netlify.app` and redeploy.
 
 For the real-time voice worker, use an always-on host such as DigitalOcean App Platform, Fly.io, Render, or a small VM. Keep LiveKit Cloud; do not run the LiveKit media server yourself for this MVP unless you need custom networking or volume pricing later.
 
@@ -150,7 +152,7 @@ For the real-time voice worker, use an always-on host such as DigitalOcean App P
 The public sample call requires a public HTTPS deployment because Vobiz must reach callback URLs.
 
 ```bash
-curl -X POST https://<your-netlify-domain>/api/public/demo-call \
+curl -X POST https://vaanivoice.netlify.app/api/public/demo-call \
   -H "content-type: application/json" \
   -d '{
     "name": "Rahul",
