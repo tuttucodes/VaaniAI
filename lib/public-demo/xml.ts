@@ -19,6 +19,7 @@ export function xmlResponse(xml: string) {
 export function speakGatherXml({
   message,
   actionUrl,
+  audioUrl,
   fallbackUrl,
   interimUrl,
   hints,
@@ -26,6 +27,7 @@ export function speakGatherXml({
 }: {
   message: string;
   actionUrl: string;
+  audioUrl?: string;
   fallbackUrl?: string;
   interimUrl?: string;
   hints?: string;
@@ -38,11 +40,14 @@ export function speakGatherXml({
     ? `<Redirect method="POST">${escapeXml(fallbackUrl)}</Redirect>`
     : `<Speak voice="WOMAN" language="${escapeXml(language)}">I did not catch that. I will end the demo call now. Thank you.</Speak>
   <Hangup/>`;
+  const promptXml = audioUrl
+    ? `<Play>${escapeXml(audioUrl)}</Play>`
+    : `<Speak voice="WOMAN" language="${escapeXml(language)}">${escapeXml(message)}</Speak>`;
 
   return xmlResponse(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Gather action="${escapeXml(actionUrl)}" method="POST" inputType="dtmf speech" language="${escapeXml(language)}" speechModel="telephony" speechEndTimeout="2" digitEndTimeout="3" finishOnKey="#" numDigits="1" executionTimeout="22" hints="${escapeXml(hints || "")}" log="true"${interimAttributes}>
-    <Speak voice="WOMAN" language="${escapeXml(language)}">${escapeXml(message)}</Speak>
+  <Gather action="${escapeXml(actionUrl)}" method="POST" inputType="speech" speechModel="default" language="${escapeXml(language)}" executionTimeout="30" speechEndTimeout="auto" hints="${escapeXml(hints || "")}" log="true" profanityFilter="false"${interimAttributes}>
+    ${promptXml}
   </Gather>
   ${fallback}
 </Response>`);

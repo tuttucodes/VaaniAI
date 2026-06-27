@@ -115,6 +115,8 @@ DEFAULT_FROM_NUMBER=...
 NEXT_PUBLIC_APP_URL=...
 ```
 
+Gemini model and voice settings are optional. The app defaults to `gemini-2.5-flash-lite` for fast text replies and Gemini Flash TTS for generated phone audio when `GEMINI_API_KEY` is present. Add `GEMINI_CHAT_MODEL`, `GEMINI_TTS_ENABLED`, `GEMINI_TTS_MODEL`, or `GEMINI_TTS_VOICE` only when you want to override those defaults.
+
 4. Apply Supabase migrations:
 
 ```bash

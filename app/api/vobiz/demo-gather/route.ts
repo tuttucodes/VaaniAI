@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { generateGeminiText } from "@/lib/ai/gemini";
+import { generateGeminiText, isGeminiTtsEnabled } from "@/lib/ai/gemini";
 import { getDemoScenario } from "@/lib/public-demo/scenarios";
 import { speakGatherXml, speakHangupXml } from "@/lib/public-demo/xml";
 import { publicBaseUrl } from "@/lib/public-demo/url";
@@ -44,6 +44,7 @@ export async function POST(request: NextRequest) {
 
   const supabase = createSupabaseAdminClient();
   const { data: call } = supabase && callId ? await supabase.from("calls").select("agent_id").eq("id", callId).single() : { data: null };
+  let assistantMessageId = "";
 
   if (supabase && call?.agent_id && speech) {
     await supabase.from("call_messages").insert({
@@ -92,6 +93,7 @@ Reply in one or two short spoken sentences. Mirror Indian English naturally. If 
       })
       .select("id")
       .single();
+    assistantMessageId = assistantMessage?.id || "";
 
     await supabase.from("call_metrics").insert({
       call_id: callId,
@@ -135,6 +137,10 @@ Reply in one or two short spoken sentences. Mirror Indian English naturally. If 
 
   return speakGatherXml({
     message: reply,
+    audioUrl:
+      isGeminiTtsEnabled() && callId && assistantMessageId
+        ? `${baseUrl}/api/public/demo-audio?call_id=${encodeURIComponent(callId)}&message_id=${encodeURIComponent(assistantMessageId)}`
+        : undefined,
     actionUrl: `${baseUrl}/api/vobiz/demo-gather?${params.toString()}`,
     fallbackUrl: `${baseUrl}/api/vobiz/demo-noinput?${params.toString()}`,
     interimUrl: `${baseUrl}/api/vobiz/demo-interim?${params.toString()}`,

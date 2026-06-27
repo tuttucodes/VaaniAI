@@ -13,16 +13,39 @@ export interface GeminiGenerationOptions {
 }
 
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
-const DEFAULT_CHAT_MODEL = "gemini-2.0-flash";
+const DEFAULT_CHAT_MODEL = "gemini-2.5-flash-lite";
 const DEFAULT_EMBEDDING_MODEL = "gemini-embedding-2";
+const DEFAULT_TTS_MODEL = "gemini-2.5-flash-preview-tts";
+const DEFAULT_TTS_VOICE = "Achird";
 const EMBEDDING_DIMENSION = 768;
+const GEMINI_TTS_SAMPLE_RATE = 24000;
+const PHONE_TTS_SAMPLE_RATE = 8000;
 
 export function getChatModel() {
   return getEnv("GEMINI_CHAT_MODEL") || DEFAULT_CHAT_MODEL;
 }
 
+function uniqueModels(models: string[]) {
+  return Array.from(new Set(models.filter(Boolean)));
+}
+
 export function getEmbeddingModel() {
   return getEnv("GEMINI_EMBEDDING_MODEL") || DEFAULT_EMBEDDING_MODEL;
+}
+
+export function getTtsModel() {
+  return getEnv("GEMINI_TTS_MODEL") || DEFAULT_TTS_MODEL;
+}
+
+export function getTtsVoice() {
+  return getEnv("GEMINI_TTS_VOICE") || DEFAULT_TTS_VOICE;
+}
+
+export function isGeminiTtsEnabled() {
+  const value = getEnv("GEMINI_TTS_ENABLED");
+  if (value === "false") return false;
+  if (value === "true") return true;
+  return isGeminiConfigured();
 }
 
 function deterministicEmbedding(text: string) {
@@ -100,30 +123,136 @@ export async function generateGeminiText(messages: GeminiChatMessage[], options:
   }
   if (!isGeminiConfigured()) throw new Error("GEMINI_API_KEY is required outside demo mode.");
 
-  const model = options.model || getChatModel();
-  const response = await fetch(`${GEMINI_API_BASE}/models/${model}:generateContent?key=${requireEnv("GEMINI_API_KEY")}`, {
+  const models = options.model ? [options.model] : uniqueModels([getChatModel(), "gemini-2.5-flash", "gemini-flash-latest"]);
+  let lastError = "";
+
+  for (const model of models) {
+    const response = await fetch(`${GEMINI_API_BASE}/models/${model}:generateContent?key=${requireEnv("GEMINI_API_KEY")}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        contents: toGeminiContents(messages),
+        generationConfig: {
+          temperature: options.temperature ?? 0.35,
+          maxOutputTokens: options.maxOutputTokens ?? 512
+        }
+      })
+    });
+
+    if (!response.ok) {
+      lastError = `Gemini generation failed for ${model}: ${response.status} ${await response.text()}`;
+      continue;
+    }
+
+    const data = (await response.json()) as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    };
+
+    const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim() || "";
+    if (text) return text;
+    lastError = `Gemini generation returned empty text for ${model}`;
+  }
+
+  throw new Error(lastError || "Gemini generation failed.");
+}
+
+function downsamplePcm16Mono(pcm: Buffer, inputSampleRate = GEMINI_TTS_SAMPLE_RATE, outputSampleRate = PHONE_TTS_SAMPLE_RATE) {
+  if (inputSampleRate === outputSampleRate) return pcm;
+
+  const inputSamples = Math.floor(pcm.length / 2);
+  const outputSamples = Math.floor((inputSamples * outputSampleRate) / inputSampleRate);
+  const output = Buffer.alloc(outputSamples * 2);
+  const ratio = inputSampleRate / outputSampleRate;
+
+  for (let outputIndex = 0; outputIndex < outputSamples; outputIndex += 1) {
+    const start = Math.floor(outputIndex * ratio);
+    const end = Math.max(start + 1, Math.floor((outputIndex + 1) * ratio));
+    let sum = 0;
+    let count = 0;
+
+    for (let inputIndex = start; inputIndex < end && inputIndex < inputSamples; inputIndex += 1) {
+      sum += pcm.readInt16LE(inputIndex * 2);
+      count += 1;
+    }
+
+    output.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(sum / Math.max(1, count)))), outputIndex * 2);
+  }
+
+  return output;
+}
+
+function pcmToWav(pcm: Buffer, sampleRate = PHONE_TTS_SAMPLE_RATE) {
+  const header = Buffer.alloc(44);
+  const dataSize = pcm.length;
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + dataSize, 4);
+  header.write("WAVE", 8);
+  header.write("fmt ", 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(sampleRate * 2, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write("data", 36);
+  header.writeUInt32LE(dataSize, 40);
+  return Buffer.concat([header, pcm]);
+}
+
+export async function generateGeminiTtsWav({
+  text,
+  voice = getTtsVoice(),
+  model = getTtsModel()
+}: {
+  text: string;
+  voice?: string;
+  model?: string;
+}) {
+  if (!isGeminiConfigured()) throw new Error("GEMINI_API_KEY is required for Gemini TTS.");
+
+  const response = await fetch(`${GEMINI_API_BASE}/models/${model}:generateContent`, {
     method: "POST",
     headers: {
-      "content-type": "application/json"
+      "content-type": "application/json",
+      "x-goog-api-key": requireEnv("GEMINI_API_KEY")
     },
     body: JSON.stringify({
-      contents: toGeminiContents(messages),
+      contents: [
+        {
+          parts: [
+            {
+              text: `Say: ${text}`
+            }
+          ]
+        }
+      ],
       generationConfig: {
-        temperature: options.temperature ?? 0.35,
-        maxOutputTokens: options.maxOutputTokens ?? 512
+        responseModalities: ["AUDIO"],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: {
+              voiceName: voice
+            }
+          }
+        }
       }
     })
   });
 
   if (!response.ok) {
-    throw new Error(`Gemini generation failed: ${response.status} ${await response.text()}`);
+    throw new Error(`Gemini TTS failed: ${response.status} ${await response.text()}`);
   }
 
   const data = (await response.json()) as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { data?: string } }> } }>;
   };
+  const encoded = data.candidates?.[0]?.content?.parts?.find((part) => part.inlineData?.data)?.inlineData?.data;
+  if (!encoded) throw new Error("Gemini TTS response did not include audio.");
 
-  return data.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim() || "";
+  return pcmToWav(downsamplePcm16Mono(Buffer.from(encoded, "base64")));
 }
 
 export async function* streamGeminiText(messages: GeminiChatMessage[], options: GeminiGenerationOptions = {}) {

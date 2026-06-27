@@ -77,16 +77,13 @@ Current Vaani implementation:
 - Gemini: configured and reachable.
 - LiveKit: configured; token creation works.
 - Vobiz: public demo calls use the XML callback flow through `/Account/{VOBIZ_AUTH_ID}/Call/` with `X-Auth-ID` and `X-Auth-Token`. Dashboard LiveKit/SIP bridge fields still need final Vobiz SIP mapping for full real-time audio into LiveKit.
-- Gemini generation is reachable but returned quota exhaustion during dental post-call QA. The app falls back to conservative transcript extraction so call records still get usable summaries/leads while provider quota is restored.
-- User supplied a new Gemini key:
-  - Local `.env` and `.env.local` were updated with the new key provided by the user. Do not commit or paste the raw key.
-  - Local `.env` and `.env.local` were also changed to `GEMINI_CHAT_MODEL=gemini-2.5-flash`.
-  - Smoke tests still returned HTTP 429:
-    - `gemini-2.0-flash-lite`: free-tier request/token quota limit is `0`
-    - `gemini-2.0-flash`: free-tier request/token quota limit is `0`
-    - `gemini-2.5-flash`: `Your prepayment credits are depleted`
-    - `gemini-flash-latest`: `Your prepayment credits are depleted`
-  - Therefore the key itself is visible/accepted, but the Google AI Studio project has no available prepay credits. The user must fix billing/prepay before high-end Gemini replies work.
+- Gemini generation and Gemini TTS are reachable with the newest local key. Do not commit or paste the raw key.
+- If future smoke tests return HTTP 429 or `prepayment credits are depleted`, fix AI Studio billing/prepay for the project behind that key before debugging app code.
+- Gemini runtime defaults are now in code:
+  - text replies default to `gemini-2.5-flash-lite`
+  - TTS defaults to `gemini-2.5-flash-preview-tts`
+  - voice defaults to `Achird`
+  - TTS auto-enables when `GEMINI_API_KEY` is configured unless `GEMINI_TTS_ENABLED=false`
 - LiveKit: Cloud project credentials work for token creation. For real phone-call audio with sub-second latency, keep LiveKit Cloud and deploy the voice worker as an always-on service on DigitalOcean/Fly/Render. Netlify functions are not suitable for a persistent LiveKit media worker.
 
 ## Important Files
@@ -151,7 +148,6 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY
 SUPABASE_SERVICE_ROLE_KEY
 VAANI_DEMO_MODE=false
 GEMINI_API_KEY
-GEMINI_CHAT_MODEL=gemini-2.0-flash
 GEMINI_EMBEDDING_MODEL=gemini-embedding-2
 LIVEKIT_URL
 LIVEKIT_API_KEY
@@ -175,9 +171,8 @@ Required before the sample call can dial:
 
 Current Netlify env action needed:
 
-- The user must update Netlify `GEMINI_API_KEY` to the new key if they want production to use it. Codex cannot edit Netlify env unless the user logs in with Netlify CLI or provides a Netlify access token.
-- However, the new Gemini key currently returns `429 prepayment credits are depleted`, so updating Netlify alone will not make Gemini work until Google AI Studio billing/prepay is fixed.
-- Also set `GEMINI_CHAT_MODEL=gemini-2.5-flash` in Netlify for a better quality/latency balance.
+- Update only `GEMINI_API_KEY` to the newest working key, save, then trigger a production deploy.
+- Leave `GEMINI_CHAT_MODEL`, `GEMINI_TTS_ENABLED`, `GEMINI_TTS_MODEL`, and `GEMINI_TTS_VOICE` unset unless intentionally overriding the code defaults.
 
 ## Public Demo Call Flow
 
@@ -204,11 +199,11 @@ Patch implemented locally:
 
 - `lib/public-demo/xml.ts`
   - default language changed from `en-US` to `en-IN`
-  - Gather changed from `inputType="speech"` to `inputType="dtmf speech"`
-  - `speechModel` changed from `phone_call` to `telephony`
-  - `speechEndTimeout="2"`, `executionTimeout="22"`, `finishOnKey="#"`, `numDigits="1"`
+  - Gather uses a conservative speech-only shape based on Vobiz docs: `inputType="speech"`, `speechModel="default"`, `speechEndTimeout="auto"`, `executionTimeout="30"`
   - accepts optional `fallbackUrl` and `interimUrl`
 - `app/api/vobiz/demo-answer/route.ts`
+  - generates the opening line with Gemini from the scenario prompt and landing-page use case
+  - falls back to the scenario first prompt only if Gemini is unavailable
   - passes fallback URL `/api/vobiz/demo-noinput`
   - passes interim URL `/api/vobiz/demo-interim`
 - `app/api/vobiz/demo-gather/route.ts`
@@ -216,6 +211,9 @@ Patch implemented locally:
   - records DTMF fallback as user input
   - passes confidence into prompt
   - prompts Gemini to mirror Indian mixed speech naturally
+- `app/api/public/demo-audio/route.ts`
+  - generates a WAV response with Gemini TTS for stored assistant messages when `GEMINI_TTS_ENABLED=true`
+  - intended to improve realism over provider `<Speak>`, but requires a working Gemini paid/prepay key
 - Added `app/api/vobiz/demo-noinput/route.ts`
   - records no-input as a system message
   - retries once with a clearer prompt
@@ -229,7 +227,14 @@ Next steps:
 2. Wait for Netlify deploy.
 3. Retest public homepage dental call.
 4. If caller speech still does not appear, inspect interim/noinput system messages in Supabase for the new call.
-5. Fix Gemini in AI Studio billing/prepay, then update Netlify `GEMINI_API_KEY` and `GEMINI_CHAT_MODEL=gemini-2.5-flash`.
+5. Update Netlify `GEMINI_API_KEY` to the newest working key and redeploy before testing production Gemini/TTS behavior.
+
+Latest test after commit `e44fccd`:
+
+- A live dental demo call queued and connected.
+- Vobiz call detail showed normal outbound completion with bill duration around 48 seconds.
+- Supabase still stored only the assistant greeting, with no `user`, `Interim speech`, `No caller speech detected`, or hangup callback rows.
+- The next patch simplified Gather XML to speech-only/default model to remove mixed DTMF mode as a variable.
 
 ## Notes For Next Engineer
 
