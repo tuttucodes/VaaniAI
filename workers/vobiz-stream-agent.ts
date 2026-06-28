@@ -43,6 +43,7 @@ type CallState = {
   name: string;
   useCase: string;
   sampleRate: number;
+  mediaEncoding: string;
   inSpeech: boolean;
   silenceFrames: number;
   speechFrames: number;
@@ -116,6 +117,50 @@ function resamplePcm16Mono(pcm: Buffer, inputRate: number, outputRate: number) {
   return output;
 }
 
+function ulawByteToPcm16(value: number) {
+  const ulaw = ~value & 0xff;
+  const sign = ulaw & 0x80;
+  const exponent = (ulaw >> 4) & 0x07;
+  const mantissa = ulaw & 0x0f;
+  let sample = ((mantissa << 3) + 0x84) << exponent;
+  sample -= 0x84;
+  return sign ? -sample : sample;
+}
+
+function mulawToPcm16Le(buffer: Buffer) {
+  const output = Buffer.alloc(buffer.length * 2);
+  for (let index = 0; index < buffer.length; index += 1) {
+    output.writeInt16LE(ulawByteToPcm16(buffer[index]), index * 2);
+  }
+  return output;
+}
+
+function pcm16SampleToMulaw(sample: number) {
+  const bias = 0x84;
+  const clip = 32635;
+  let pcm = Math.max(-clip, Math.min(clip, sample));
+  const sign = pcm < 0 ? 0x80 : 0;
+  if (pcm < 0) pcm = -pcm;
+  pcm += bias;
+
+  let exponent = 7;
+  for (let mask = 0x4000; (pcm & mask) === 0 && exponent > 0; mask >>= 1) {
+    exponent -= 1;
+  }
+
+  const mantissa = (pcm >> (exponent + 3)) & 0x0f;
+  return ~(sign | (exponent << 4) | mantissa) & 0xff;
+}
+
+function pcm16LeToMulaw(pcm: Buffer) {
+  const samples = Math.floor(pcm.length / 2);
+  const output = Buffer.alloc(samples);
+  for (let index = 0; index < samples; index += 1) {
+    output[index] = pcm16SampleToMulaw(pcm.readInt16LE(index * 2));
+  }
+  return output;
+}
+
 function rmsPcm16Le(pcm: Buffer) {
   const samples = Math.floor(pcm.length / 2);
   if (!samples) return 0;
@@ -127,14 +172,18 @@ function rmsPcm16Le(pcm: Buffer) {
   return Math.sqrt(sum / samples);
 }
 
-function sendPcm(ws: WebSocket, pcm: Buffer, sampleRate = phoneSampleRate) {
+function sendPcm(ws: WebSocket, pcm: Buffer, sampleRate = phoneSampleRate, encoding = "audio/x-l16") {
   const chunkBytes = Math.max(160, Math.floor(sampleRate * 2 * 0.02));
-  for (let offset = 0; offset < pcm.length; offset += chunkBytes) {
-    const chunk = pcm.subarray(offset, offset + chunkBytes);
+  const useMulaw = encoding.toLowerCase().includes("mulaw") || encoding.toLowerCase().includes("pcmu");
+  const outbound = useMulaw ? pcm16LeToMulaw(pcm) : pcm;
+  const outboundChunkBytes = useMulaw ? Math.max(80, Math.floor(sampleRate * 0.02)) : chunkBytes;
+
+  for (let offset = 0; offset < outbound.length; offset += outboundChunkBytes) {
+    const chunk = outbound.subarray(offset, offset + outboundChunkBytes);
     sendJson(ws, {
       event: "playAudio",
       media: {
-        contentType: "audio/x-l16",
+        contentType: useMulaw ? "audio/x-mulaw" : "audio/x-l16",
         sampleRate,
         payload: chunk.toString("base64")
       }
@@ -226,7 +275,7 @@ async function playText(ws: WebSocket, state: CallState, text: string) {
   const started = Date.now();
   const pcm = await generateGeminiTtsPcm8khz({ text });
   state.assistantAudioQueued = true;
-  sendPcm(ws, pcm, phoneSampleRate);
+  sendPcm(ws, pcm, phoneSampleRate, state.mediaEncoding);
   sendJson(ws, { event: "checkpoint", streamId: state.streamId, name: `assistant-${Date.now()}` });
   return Date.now() - started;
 }
@@ -368,6 +417,7 @@ wss.on("connection", (ws, request) => {
       const runtime = await getCallRuntime(callId);
       const agentId = runtime?.agentId || "";
       const sampleRate = message.start.mediaFormat?.sampleRate || phoneSampleRate;
+      const mediaEncoding = message.start.mediaFormat?.encoding || "audio/x-l16";
       state = {
         callId,
         agentId,
@@ -378,6 +428,7 @@ wss.on("connection", (ws, request) => {
         name,
         useCase,
         sampleRate,
+        mediaEncoding,
         inSpeech: false,
         silenceFrames: 0,
         speechFrames: 0,
@@ -392,7 +443,12 @@ wss.on("connection", (ws, request) => {
         processedTurns: 0
       };
 
-      await recordMessage(callId, agentId, "system", `Vobiz stream started: ${streamId} at ${sampleRate} Hz. Gemini orchestration active.`);
+      await recordMessage(
+        callId,
+        agentId,
+        "system",
+        `Vobiz stream started: ${streamId} at ${sampleRate} Hz (${mediaEncoding}). Gemini orchestration active.`
+      );
       const opening = await getOpening(callId, openingMessageId, runtime?.firstMessage || `Hi ${name}, how can I help?`);
       await playText(ws, state, opening);
       return;
@@ -404,8 +460,11 @@ wss.on("connection", (ws, request) => {
     }
 
     if (isMediaEvent(message) && message.media?.payload && state) {
-      const inboundBe = Buffer.from(message.media.payload, "base64");
-      await handleAudioFrame(ws, state, swap16(inboundBe));
+      const inbound = Buffer.from(message.media.payload, "base64");
+      const encoding = state.mediaEncoding.toLowerCase();
+      const looksMulaw = encoding.includes("mulaw") || encoding.includes("pcmu") || inbound.length === Math.floor(state.sampleRate * 0.02);
+      const inboundLe = looksMulaw ? mulawToPcm16Le(inbound) : swap16(inbound);
+      await handleAudioFrame(ws, state, inboundLe);
     }
   });
 
