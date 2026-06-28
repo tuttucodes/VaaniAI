@@ -4,6 +4,7 @@ import { ok, fail } from "@/lib/api";
 import { publicDemoCallSchema } from "@/lib/validation";
 import { rateLimit } from "@/lib/rate-limit";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import { generateDemoOpeningLine } from "@/lib/public-demo/opening";
 import { getPublicDemoAgent } from "@/lib/public-demo/storage";
 import { publicBaseUrl, assertPublicHttpsUrl } from "@/lib/public-demo/url";
 import { vobizProvider } from "@/lib/telephony/vobiz";
@@ -21,6 +22,11 @@ export async function POST(request: NextRequest) {
     if (!supabase) throw new Error("Calling is not fully configured yet.");
 
     const { user, agent, scenario } = await getPublicDemoAgent(input.scenario);
+    const openingLine = await generateDemoOpeningLine({
+      name: input.name,
+      useCase: input.use_case,
+      scenario
+    });
     const { data: call, error: callError } = await supabase
       .from("calls")
       .insert({
@@ -36,11 +42,25 @@ export async function POST(request: NextRequest) {
       .single();
     if (callError) throw callError;
 
+    const { data: openingMessage, error: openingMessageError } = await supabase
+      .from("call_messages")
+      .insert({
+        call_id: call.id,
+        agent_id: agent.id,
+        role: "assistant",
+        content: openingLine,
+        latency_ms: 0
+      })
+      .select("id")
+      .single();
+    if (openingMessageError) throw openingMessageError;
+
     const params = new URLSearchParams({
       call_id: call.id,
       scenario: scenario.id,
       name: input.name,
-      use_case: input.use_case
+      use_case: input.use_case,
+      opening_message_id: openingMessage.id
     });
 
     const telephony = await vobizProvider.createXmlOutboundCall({

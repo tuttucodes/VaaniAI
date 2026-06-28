@@ -117,6 +117,12 @@ NEXT_PUBLIC_APP_URL=...
 
 Gemini model and voice settings are optional. The app defaults to `gemini-2.5-flash-lite` for fast text replies and Gemini Flash TTS for generated phone audio when `GEMINI_API_KEY` is present. Add `GEMINI_CHAT_MODEL`, `GEMINI_TTS_ENABLED`, `GEMINI_TTS_MODEL`, or `GEMINI_TTS_VOICE` only when you want to override those defaults.
 
+For Vobiz, REST calling and production realtime voice need different credentials:
+
+- REST/XML calls need `VOBIZ_AUTH_ID`, `VOBIZ_AUTH_SECRET`, `VOBIZ_BASE_URL`, and a Vobiz caller ID number.
+- LiveKit SIP needs the Vobiz SIP trunk domain, SIP username, SIP password, and the Vobiz phone number mapped into a LiveKit outbound trunk.
+- Low-latency Vobiz Stream needs an always-on public `wss://` worker URL. Set `PUBLIC_DEMO_USE_STREAM=true` and `VOBIZ_STREAM_WS_URL=wss://...` only after deploying `npm run worker:vobiz-stream` on a VM/container host. Netlify cannot host the persistent WebSocket media loop.
+
 4. Apply Supabase migrations:
 
 ```bash

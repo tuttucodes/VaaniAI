@@ -60,3 +60,24 @@ export function speakHangupXml(message: string, language = "en-IN") {
   <Hangup/>
 </Response>`);
 }
+
+export function streamXml({
+  streamUrl,
+  statusCallbackUrl,
+  contentType = "audio/x-l16;rate=8000",
+  timeoutSeconds = 600
+}: {
+  streamUrl: string;
+  statusCallbackUrl?: string;
+  contentType?: "audio/x-l16;rate=8000" | "audio/x-l16;rate=16000" | "audio/x-l16;rate=24000" | "audio/x-mulaw;rate=8000";
+  timeoutSeconds?: number;
+}) {
+  const statusAttributes = statusCallbackUrl
+    ? ` statusCallbackUrl="${escapeXml(statusCallbackUrl)}" statusCallbackMethod="POST"`
+    : "";
+
+  return xmlResponse(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Stream bidirectional="true" keepCallAlive="true" contentType="${escapeXml(contentType)}" streamTimeout="${timeoutSeconds}" maxRetries="2"${statusAttributes}>${escapeXml(streamUrl)}</Stream>
+</Response>`);
+}

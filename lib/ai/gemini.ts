@@ -211,6 +211,19 @@ export async function generateGeminiTtsWav({
   voice?: string;
   model?: string;
 }) {
+  const pcm = await generateGeminiTtsPcm8khz({ text, voice, model });
+  return pcmToWav(pcm);
+}
+
+export async function generateGeminiTtsPcm8khz({
+  text,
+  voice = getTtsVoice(),
+  model = getTtsModel()
+}: {
+  text: string;
+  voice?: string;
+  model?: string;
+}) {
   if (!isGeminiConfigured()) throw new Error("GEMINI_API_KEY is required for Gemini TTS.");
 
   const response = await fetch(`${GEMINI_API_BASE}/models/${model}:generateContent`, {
@@ -252,7 +265,7 @@ export async function generateGeminiTtsWav({
   const encoded = data.candidates?.[0]?.content?.parts?.find((part) => part.inlineData?.data)?.inlineData?.data;
   if (!encoded) throw new Error("Gemini TTS response did not include audio.");
 
-  return pcmToWav(downsamplePcm16Mono(Buffer.from(encoded, "base64")));
+  return downsamplePcm16Mono(Buffer.from(encoded, "base64"));
 }
 
 export async function* streamGeminiText(messages: GeminiChatMessage[], options: GeminiGenerationOptions = {}) {

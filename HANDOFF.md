@@ -85,6 +85,8 @@ Current Vaani implementation:
   - voice defaults to `Achird`
   - TTS auto-enables when `GEMINI_API_KEY` is configured unless `GEMINI_TTS_ENABLED=false`
 - LiveKit: Cloud project credentials work for token creation. For real phone-call audio with sub-second latency, keep LiveKit Cloud and deploy the voice worker as an always-on service on DigitalOcean/Fly/Render. Netlify functions are not suitable for a persistent LiveKit media worker.
+- Vobiz/LiveKit production setup still needs Vobiz SIP trunk username and password. Auth ID/token are only for REST/XML APIs; LiveKit SIP outbound trunk requires SIP domain, username, password, and caller ID number.
+- For natural, interruptible calls, prefer Vobiz `<Stream bidirectional="true" keepCallAlive="true">` to an always-on WebSocket worker, or LiveKit SIP with a deployed LiveKit Agent. XML `<Gather>` is IVR-style and has already produced unreliable speech callbacks in live tests.
 
 ## Important Files
 
@@ -107,7 +109,9 @@ Current Vaani implementation:
   - `app/api/vobiz/demo-ring/route.ts`
   - `app/api/vobiz/demo-noinput/route.ts` 
   - `app/api/vobiz/demo-interim/route.ts` 
+  - `app/api/vobiz/demo-stream-status/route.ts`
 - Voice worker MVP: `workers/voice-agent.ts`
+- Vobiz Stream worker scaffold: `workers/vobiz-stream-agent.ts`
 - Migrations: `supabase/migrations/`
 - Seed script: `scripts/seed-demo.ts`
 - Netlify config: `netlify.toml`
@@ -235,6 +239,21 @@ Latest test after commit `e44fccd`:
 - Vobiz call detail showed normal outbound completion with bill duration around 48 seconds.
 - Supabase still stored only the assistant greeting, with no `user`, `Interim speech`, `No caller speech detected`, or hangup callback rows.
 - The next patch simplified Gather XML to speech-only/default model to remove mixed DTMF mode as a variable.
+
+Latest production test after commit `17193d0`:
+
+- Public demo call queued and completed.
+- Before the fast-answer fix, `call_messages` was empty and post-call analysis hallucinated from an empty transcript.
+- Fix in progress: generate and store the opening line before dialing, pass `opening_message_id` into Vobiz, make answer webhook return XML without Gemini latency, and skip post-call analysis when no user transcript exists.
+
+## Production Vobiz/LiveKit Checklist
+
+- Vobiz REST/XML: `VOBIZ_AUTH_ID`, `VOBIZ_AUTH_SECRET`, `VOBIZ_BASE_URL`, `VOBIZ_PHONE_NUMBER`.
+- Vobiz SIP trunk for LiveKit: SIP domain, SIP username, SIP password, caller ID number, trunk ID if available.
+- LiveKit: `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, outbound SIP trunk ID after provisioning.
+- Vobiz inbound: route the Vobiz number/application/SIP trunk to LiveKit SIP URI or to Vobiz Stream XML answer URL.
+- Vobiz Stream: deploy `npm run worker:vobiz-stream` on an always-on host with public TLS WebSocket URL, then set `PUBLIC_DEMO_USE_STREAM=true` and `VOBIZ_STREAM_WS_URL=wss://...`.
+- Netlify remains the dashboard/API/callback host. It should not be used for the persistent WebSocket media worker.
 
 ## Notes For Next Engineer
 

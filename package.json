@@ -9,11 +9,13 @@
     "lint": "next lint",
     "typecheck": "next typegen && tsc --noEmit",
     "worker:voice": "tsx workers/voice-agent.ts",
+    "worker:vobiz-stream": "tsx workers/vobiz-stream-agent.ts",
     "seed": "tsx scripts/seed-demo.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.8",
+    "@types/ws": "^8.18.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "livekit-client": "^2.11.3",
@@ -27,6 +29,7 @@
     "react-dom": "^19.0.0",
     "read-excel-file": "^9.2.0",
     "tailwind-merge": "^2.6.0",
+    "ws": "^8.21.0",
     "zod": "^3.24.4"
   },
   "devDependencies": {
