@@ -1,7 +1,8 @@
+.git
 .next
 node_modules
-npm-debug.log
 .env
 .env.local
-.git
-.DS_Store
+.netlify
+coverage
+npm-debug.log*

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
+import { Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,7 +19,9 @@ function configValue<T>(source: Record<string, unknown>, key: string, fallback: 
 
 export function AgentForm({ agent }: { agent?: Agent }) {
   const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
   const [isPending, startTransition] = useTransition();
+  const [isImproving, setIsImproving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [costMode, setCostMode] = useState<CostMode>((agent?.cost_config?.mode as CostMode) || "economy");
   const [latencyMode, setLatencyMode] = useState<LatencyMode>((agent?.latency_config?.mode as LatencyMode) || "ultra-low");
@@ -29,6 +32,52 @@ export function AgentForm({ agent }: { agent?: Agent }) {
     configValue(agent?.model_config || {}, "knowledgeRetrievalEnabled", true)
   );
   const [fillersEnabled, setFillersEnabled] = useState(configValue(agent?.model_config || {}, "humanFillersEnabled", true));
+
+  function setFormField(name: string, value: string) {
+    const field = formRef.current?.elements.namedItem(name);
+    if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement || field instanceof HTMLSelectElement) {
+      field.value = value;
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  }
+
+  async function improveAgent() {
+    if (!formRef.current) return;
+    setError(null);
+    setIsImproving(true);
+
+    const formData = new FormData(formRef.current);
+    const body = {
+      name: String(formData.get("name") || ""),
+      description: String(formData.get("description") || ""),
+      system_prompt: String(formData.get("system_prompt") || ""),
+      first_message: String(formData.get("first_message") || ""),
+      language: String(formData.get("language") || "mixed-IN"),
+      end_call_rules: String(formData.get("end_call_rules") || "")
+    };
+
+    try {
+      const response = await fetch("/api/agents/improve", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        setError(payload.error || "Unable to improve agent");
+        return;
+      }
+
+      setFormField("description", payload.description || body.description);
+      setFormField("system_prompt", payload.system_prompt || body.system_prompt);
+      setFormField("first_message", payload.first_message || body.first_message);
+      setFormField("end_call_rules", payload.end_call_rules || body.end_call_rules);
+    } catch {
+      setError("Unable to improve agent right now");
+    } finally {
+      setIsImproving(false);
+    }
+  }
 
   function saveAgent(formData: FormData) {
     setError(null);
@@ -70,6 +119,7 @@ export function AgentForm({ agent }: { agent?: Agent }) {
 
   return (
     <form
+      ref={formRef}
       onSubmit={(event) => {
         event.preventDefault();
         saveAgent(new FormData(event.currentTarget));
@@ -77,8 +127,16 @@ export function AgentForm({ agent }: { agent?: Agent }) {
     >
       <Card>
         <CardHeader>
-          <CardTitle>{agent ? "Agent configuration" : "Create AI voice agent"}</CardTitle>
-          <CardDescription>Keep prompts compact and runtime controls tuned for phone-call latency.</CardDescription>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <CardTitle>{agent ? "Agent configuration" : "Create AI voice agent"}</CardTitle>
+              <CardDescription>Keep prompts compact and runtime controls tuned for phone-call latency.</CardDescription>
+            </div>
+            <Button type="button" variant="outline" onClick={improveAgent} disabled={isImproving || isPending}>
+              <Sparkles aria-hidden="true" />
+              {isImproving ? "Improving..." : "Improve with AI"}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <FieldGroup>

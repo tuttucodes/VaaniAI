@@ -1,6 +1,18 @@
 import { generateGeminiText } from "@/lib/ai/gemini";
 import { fillTemplate, getDemoScenario } from "@/lib/public-demo/scenarios";
 
+function cleanOpeningLine(value: string) {
+  const line = value
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/^["'“”`]+|["'“”`]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (line.length < 32) return "";
+  if (!/[.?!]$/.test(line)) return `${line}.`;
+  return line;
+}
+
 export async function generateDemoOpeningLine({
   name,
   useCase,
@@ -25,7 +37,8 @@ Start this phone call. Use one short, warm opening line and one clear question. 
       ],
       { temperature: 0.55, maxOutputTokens: 80 }
     );
-    if (line.trim()) return line.trim();
+    const cleanLine = cleanOpeningLine(line);
+    if (cleanLine) return cleanLine;
   } catch {
     // Keep outbound calling available if Gemini is briefly overloaded.
   }

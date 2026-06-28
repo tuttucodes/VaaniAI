@@ -22,6 +22,15 @@ export const agentSchema = z.object({
 
 export const agentPatchSchema = agentSchema.partial();
 
+export const agentImproveSchema = z.object({
+  name: z.string().max(120).optional().nullable(),
+  description: z.string().max(2000).optional().nullable(),
+  system_prompt: z.string().max(12000).optional().nullable(),
+  first_message: z.string().max(1000).optional().nullable(),
+  language: z.string().max(32).optional().nullable(),
+  end_call_rules: z.string().max(2000).optional().nullable()
+});
+
 export const startCallSchema = z.object({
   agent_id: z.string().uuid(),
   phone_number: z.string().min(6).max(32).regex(/^[+0-9()\-.\s]+$/, "Use a valid phone number format"),
@@ -58,5 +67,6 @@ export const publicDemoCallSchema = z.object({
 
 export type AgentInput = z.infer<typeof agentSchema>;
 export type AgentPatchInput = z.infer<typeof agentPatchSchema>;
+export type AgentImproveInput = z.infer<typeof agentImproveSchema>;
 export type StartCallInput = z.infer<typeof startCallSchema>;
 export type PublicDemoCallInput = z.infer<typeof publicDemoCallSchema>;

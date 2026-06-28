@@ -266,3 +266,26 @@ Latest production test after commit `17193d0`:
 - The LiveKit worker is a TypeScript MVP orchestrator with clear interfaces and TODO boundaries for actual audio-frame STT/TTS provider streaming behavior. Host it as an always-on worker, not a serverless function.
 - Client forms use explicit `onSubmit` handlers for agent creation, knowledge upload, and outbound calls. This avoids fragile client `form action` behavior in the dashboard.
 - `scripts/simulate-dental-call.ts` can be run against a call id to seed a realistic dental receptionist transcript and post-call analysis for QA.
+## 2026-06-28 Stream Worker + Agent Builder Update
+
+- New Google CLI account authenticated as `raybkmedia@gmail.com`.
+- Active deploy project selected: `project-519d9218-f822-42ae-823` (`My First Project`), billing enabled.
+- Cloud APIs enabled: Cloud Run, Cloud Build, Artifact Registry.
+- Vobiz Stream worker is deployed on Cloud Run:
+  - HTTPS health URL: `https://vaani-vobiz-stream-881777363529.asia-south1.run.app/health`
+  - WebSocket URL for Netlify: `wss://vaani-vobiz-stream-881777363529.asia-south1.run.app`
+  - Health check returned `{ ok: true, worker: "vobiz-stream-agent", mode: "gemini-live" }`.
+- Netlify production env updates made:
+  - `PUBLIC_DEMO_USE_STREAM=true`
+  - `VOBIZ_STREAM_WS_URL=wss://vaani-vobiz-stream-881777363529.asia-south1.run.app`
+  - removed production `GEMINI_CHAT_MODEL` override; attempted to remove `GEMINI_EMBEDDING_MODEL` override so code defaults control these.
+- `workers/vobiz-stream-agent.ts` now uses Gemini Live via `@google/genai`:
+  - receives Vobiz bidirectional Stream audio
+  - converts inbound Vobiz L16 big-endian to little-endian
+  - resamples phone audio to Gemini Live 16 kHz input
+  - streams Gemini audio output back to Vobiz as L16 little-endian
+  - stores Gemini input/output transcripts as call messages
+  - sends `clearAudio` on barge-in energy while assistant audio is queued
+- Public demo Stream XML now negotiates `audio/x-l16;rate=16000` by default.
+- Added Cloud Build file `cloudbuild.vobiz-stream.yaml` and `Dockerfile.vobiz-stream`.
+- Added `/api/agents/improve` plus dashboard "Improve with AI" button for agent creation/editing. It uses Gemini server-side to improve description, prompt, first message, and end-call rules without exposing keys.
