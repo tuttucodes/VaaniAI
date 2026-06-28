@@ -324,3 +324,26 @@ Latest production test after commit `17193d0`:
   - user transcript row
   - assistant response row
   - final diagnostics row: `Vobiz stream closed. Frames=..., speech_like=..., max_rms=..., processed_turns=...`
+
+## 2026-06-28 Dashboard Agent Creation + Stream Calls
+
+- Production dashboard was tested with a disposable confirmed Supabase user.
+- Created a real dashboard agent:
+  - Agent id: `b96ab007-5abb-4f2b-a3df-634b20d150a9`
+  - Name: `Kochi Dental Receptionist`
+- The `/api/agents/improve` endpoint initially failed in the live UI with `AI response did not include JSON`.
+- Patch pushed as `010f925`:
+  - Gemini text helper supports `responseMimeType: "application/json"`.
+  - `/api/agents/improve` requests JSON mode and falls back to a deterministic production-safe improvement if Gemini still returns malformed text.
+  - Live retest succeeded with no UI error.
+- Dashboard agent creation succeeded after using temperature `0.4`; the earlier `0.45` test value was blocked by the browser because the input step is `0.1`.
+- Patch pushed as `7a975f6`:
+  - Added `/api/vobiz/agent-answer` for dashboard outbound calls.
+  - `startCall` now stores the agent first message and, when `VOBIZ_STREAM_WS_URL` is configured, places outbound calls through Vobiz XML/Stream instead of the old generic TODO adapter.
+  - The Cloud Run stream worker now loads `agents.system_prompt` and `agents.first_message` from Supabase for each call.
+  - Cloud Run worker deployed as revision `vaani-vobiz-stream-00005-98s`.
+- Dashboard Start Call live test:
+  - App call id: `c9e76aa8-c0e8-4055-be95-b9e938828f38`
+  - Vobiz call id: `adb4e0d9-e02c-4325-ab9a-5feee283b097`
+  - CDR: `answer_time=null`, `billsec=0`, `ring_time=53`, `hangup_cause=NO_USER_RESPONSE`, `hangup_source=Carrier`, `total_cost=0`.
+  - Interpretation: dashboard call creation and Vobiz dial-out worked, but this test call was not answered, so no Vobiz stream opened and no caller transcript could be captured.
