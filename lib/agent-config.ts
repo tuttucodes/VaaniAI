@@ -71,7 +71,7 @@ export function toAgentPatch(input: AgentPatchInput) {
         description: input.description || null,
         system_prompt: input.system_prompt || "You are a concise AI voice assistant.",
         first_message: input.first_message || null,
-        language: input.language || "en-IN",
+        language: input.language || "multilingual-IN",
         voice_id: input.voice_id || "gemini-natural-female",
         temperature: input.temperature ?? 0.4,
         max_call_duration_seconds: input.max_call_duration_seconds ?? 600,

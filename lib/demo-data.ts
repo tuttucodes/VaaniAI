@@ -24,7 +24,7 @@ export const demoAgent: Agent = {
   system_prompt:
     "You are a friendly, human-like sales assistant. You answer questions clearly, qualify the lead, explain the product, and try to book a follow-up. Keep responses short, natural, and conversational. Ask one question at a time.",
   first_message: "Hi, this is Vaani. I can help answer questions and book a quick follow-up.",
-  language: "en-IN",
+  language: "multilingual-IN",
   voice_id: "gemini-natural-female",
   model_config: {
     model: "gemini-2.0-flash",

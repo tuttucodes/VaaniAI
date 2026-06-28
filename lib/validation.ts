@@ -5,7 +5,7 @@ export const agentSchema = z.object({
   description: z.string().max(500).optional().nullable(),
   system_prompt: z.string().min(10).max(12000),
   first_message: z.string().max(1000).optional().nullable(),
-  language: z.string().min(2).max(32).default("en-IN"),
+  language: z.string().min(2).max(32).default("multilingual-IN"),
   voice_id: z.string().min(2).max(120).default("gemini-natural-female"),
   temperature: z.coerce.number().min(0).max(1.5).default(0.4),
   max_call_duration_seconds: z.coerce.number().int().min(30).max(7200).default(600),

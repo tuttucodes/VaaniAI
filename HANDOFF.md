@@ -405,3 +405,26 @@ Latest production test after commit `17193d0`:
   - XML CLI smoke test confirmed `contentType="audio/x-mulaw;rate=8000"`, `audioTrack="inbound"`, recording XML when enabled, and URL escaping.
   - Secret scan across tracked files found no live keys.
 - Important: not pushed/deployed yet after this reset. User asked not to burn Netlify credits with frequent pushes. Batch is local until final deploy decision.
+
+## 2026-06-28 Barge-In, Multilingual, And RAG Tuning
+
+- User confirmed the real Vobiz stream call could hear and speak, but barge-in was too sensitive and background noise interrupted the assistant.
+- Root cause: the worker accepted short RMS spikes as speech while assistant audio was queued, then sent `clearAudio` too aggressively.
+- Runtime changes:
+  - `workers/vobiz-stream-agent.ts` now requires sustained caller speech before a turn starts and before barge-in clears assistant audio.
+  - Barge-in has a 900 ms assistant-protection window after TTS starts plus 280 ms sustained strong speech before `clearAudio`.
+  - STT language hint now covers English, Malayalam, Manglish, Tamil, Telugu, Kannada, Hindi, and mixed South Indian speech.
+  - Runtime prompts now avoid repeated greetings, use phone-call output rules, ask the caller to repeat unclear/noisy input, and mirror the caller's language.
+  - Worker now retrieves top 3 RAG chunks during Vobiz stream turns and logs RAG latency into `call_messages`.
+  - `lib/rag/retrieval.ts` filters weak vector/keyword matches so irrelevant top-k chunks are not injected into answers.
+- Product changes:
+  - All new/edited agents now save `language: multilingual-IN`; there is no single-language lock in the agent form.
+  - Dashboard agent list displays `Multilingual` instead of raw language codes.
+  - Public demo scenarios and agent-improvement prompts now explicitly support Malayalam, Tamil, Telugu, Kannada, Hindi, English, and mixed speech.
+- Verification:
+  - `npm run typecheck -- --pretty false` passed.
+  - `npm run build` passed.
+  - Cloud Build image pushed: `asia-south1-docker.pkg.dev/project-519d9218-f822-42ae-823/vaani/vobiz-stream:vad-rag-multilingual-20260628124413`.
+  - Cloud Run worker deployed as revision `vaani-vobiz-stream-00008-gbt`, serving 100 percent traffic.
+  - Health OK: `https://vaani-vobiz-stream-881777363529.asia-south1.run.app/health`.
+  - WebSocket smoke OK: worker returned `playAudio` with `contentType=audio/x-mulaw`, `sampleRate=8000`, `payloadBytes=160`, and a checkpoint.

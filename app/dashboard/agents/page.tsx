@@ -7,6 +7,11 @@ import { StatusPill } from "@/components/dashboard/status-pill";
 import { listAgents, listKnowledgeFiles, listCalls } from "@/lib/data";
 import { requireCurrentUser } from "@/lib/supabase/server";
 
+function languageLabel(language: string) {
+  if (language === "multilingual-IN" || language === "mixed-IN") return "Multilingual";
+  return language;
+}
+
 export default async function AgentsPage() {
   const user = await requireCurrentUser();
   const [agents, knowledgeFiles, calls] = await Promise.all([listAgents(user.id), listKnowledgeFiles(user.id), listCalls(user.id)]);
@@ -44,7 +49,7 @@ export default async function AgentsPage() {
                   <div className="font-medium">{agent.name}</div>
                   <div className="text-xs text-muted-foreground">{agent.description}</div>
                 </TableCell>
-                <TableCell>{agent.language}</TableCell>
+                <TableCell>{languageLabel(agent.language)}</TableCell>
                 <TableCell>
                   <StatusPill status={String(agent.cost_config?.mode || "economy")} />
                 </TableCell>

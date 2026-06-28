@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSet, FieldLegend } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -52,7 +51,7 @@ export function AgentForm({ agent }: { agent?: Agent }) {
       description: String(formData.get("description") || ""),
       system_prompt: String(formData.get("system_prompt") || ""),
       first_message: String(formData.get("first_message") || ""),
-      language: String(formData.get("language") || "mixed-IN"),
+      language: "multilingual-IN",
       end_call_rules: String(formData.get("end_call_rules") || "")
     };
 
@@ -86,7 +85,7 @@ export function AgentForm({ agent }: { agent?: Agent }) {
       description: String(formData.get("description") || ""),
       system_prompt: String(formData.get("system_prompt") || ""),
       first_message: String(formData.get("first_message") || ""),
-      language: String(formData.get("language") || "en-IN"),
+      language: "multilingual-IN",
       voice_id: String(formData.get("voice_id") || "gemini-natural-female"),
       temperature: Number(formData.get("temperature") || 0.4),
       max_call_duration_seconds: Number(formData.get("max_call_duration_seconds") || 600),
@@ -146,18 +145,10 @@ export function AgentForm({ agent }: { agent?: Agent }) {
                 <Input id="name" name="name" defaultValue={agent?.name || "Sales Demo Agent"} required />
               </Field>
               <Field>
-                <FieldLabel htmlFor="language">Language</FieldLabel>
-                <Select
-                  id="language"
-                  name="language"
-                  defaultValue={agent?.language || "en-IN"}
-                  options={[
-                    { label: "English India", value: "en-IN" },
-                    { label: "Hindi", value: "hi-IN" },
-                    { label: "Malayalam", value: "ml-IN" },
-                    { label: "Mixed speech", value: "mixed-IN" }
-                  ]}
-                />
+                <FieldLabel htmlFor="language_display">Language handling</FieldLabel>
+                <Input id="language_display" value="Multilingual auto-detect" readOnly />
+                <input type="hidden" name="language" value="multilingual-IN" />
+                <FieldDescription>English, Malayalam, Tamil, Telugu, Kannada, Hindi, and mixed speech.</FieldDescription>
               </Field>
             </div>
             <Field>

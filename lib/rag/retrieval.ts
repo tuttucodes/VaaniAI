@@ -5,9 +5,17 @@ import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import type { AgentKnowledgeChunk } from "@/lib/types";
 
 const retrievalCache = new Map<string, { expiresAt: number; chunks: AgentKnowledgeChunk[]; latencyMs: number }>();
+const MIN_VECTOR_SIMILARITY = 0.18;
+const MIN_KEYWORD_SCORE = 0.02;
 
 function cacheKey(agentId: string, query: string, topK: number) {
   return `${agentId}:${topK}:${query.toLowerCase().replace(/\s+/g, " ").trim().slice(0, 240)}`;
+}
+
+function hasUsefulRelevance(chunk: AgentKnowledgeChunk) {
+  const similarity = typeof chunk.similarity === "number" ? chunk.similarity : 0;
+  const keywordScore = typeof chunk.keyword_score === "number" ? chunk.keyword_score : 0;
+  return similarity >= MIN_VECTOR_SIMILARITY || keywordScore >= MIN_KEYWORD_SCORE;
 }
 
 export async function retrieveRelevantKnowledge({
@@ -61,7 +69,7 @@ export async function retrieveRelevantKnowledge({
 
   if (error) throw error;
 
-  const chunks = (data || []) as AgentKnowledgeChunk[];
+  const chunks = ((data || []) as AgentKnowledgeChunk[]).filter(hasUsefulRelevance).slice(0, topK);
   const latencyMs = Math.round(performance.now() - startedAt);
   retrievalCache.set(key, {
     chunks,

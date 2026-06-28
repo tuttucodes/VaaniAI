@@ -54,7 +54,7 @@ export async function ensurePublicDemoAgents() {
         description: scenario.subtitle,
         system_prompt: scenario.systemPrompt,
         first_message: scenario.firstPrompt,
-        language: "en-IN",
+        language: "multilingual-IN",
         voice_id: "vobiz-woman-en-us",
         temperature: 0.35,
         max_call_duration_seconds: 240,

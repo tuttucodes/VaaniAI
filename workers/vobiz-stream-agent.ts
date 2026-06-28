@@ -2,7 +2,10 @@ import http from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
 import { generateGeminiText, generateGeminiTtsPcm8khz, transcribeGeminiPcm } from "@/lib/ai/gemini";
 import { getDemoScenario, type DemoScenarioId } from "@/lib/public-demo/scenarios";
+import { compactRetrievedContext } from "@/lib/rag/chunking";
+import { retrieveRelevantKnowledge } from "@/lib/rag/retrieval";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import type { AgentKnowledgeChunk } from "@/lib/types";
 
 type VobizStartEvent = {
   event: "start";
@@ -47,9 +50,13 @@ type CallState = {
   inSpeech: boolean;
   silenceFrames: number;
   speechFrames: number;
+  candidateSpeechFrames: number;
+  candidateBuffers: Buffer[];
+  bargeInFrames: number;
   turnBuffers: Buffer[];
   processing: boolean;
   assistantAudioQueued: boolean;
+  assistantProtectedUntil: number;
   history: HistoryTurn[];
   turnStartedAt: number;
   mediaFrames: number;
@@ -61,10 +68,12 @@ type CallState = {
 
 const port = Number(process.env.PORT || process.env.VOBIZ_STREAM_PORT || 8080);
 const phoneSampleRate = 8000;
-const speechRmsThreshold = 0.006;
-const bargeInRmsThreshold = 0.016;
-const minSpeechFrames = 4; // 80 ms.
-const endSilenceFrames = 18; // 360 ms.
+const speechRmsThreshold = 0.011;
+const bargeInRmsThreshold = 0.028;
+const speechStartFrames = 10; // 200 ms of sustained voice before a turn starts.
+const minSpeechFrames = 12; // 240 ms.
+const bargeInSpeechFrames = 14; // 280 ms before clearing assistant audio.
+const endSilenceFrames = 24; // 480 ms.
 const maxUtteranceFrames = 900; // 18 seconds.
 
 function isStartEvent(message: unknown): message is VobizStartEvent {
@@ -238,15 +247,20 @@ function resetTurn(state: CallState) {
   state.inSpeech = false;
   state.silenceFrames = 0;
   state.speechFrames = 0;
+  state.candidateSpeechFrames = 0;
+  state.candidateBuffers = [];
+  state.bargeInFrames = 0;
   state.turnBuffers = [];
   state.turnStartedAt = Date.now();
 }
 
-function buildReplyPrompt(state: CallState, transcript: string) {
+function buildReplyPrompt(state: CallState, transcript: string, knowledge: AgentKnowledgeChunk[] = []) {
   const recentHistory = state.history
     .slice(-6)
     .map((turn) => `${turn.role === "user" ? "Caller" : "Assistant"}: ${turn.content}`)
     .join("\n");
+  const retrievedContext = compactRetrievedContext(knowledge).slice(0, 1600);
+  const isFirstUserTurn = state.history.filter((turn) => turn.role === "user").length <= 1;
 
   return `${state.agentSystemPrompt || state.scenario.systemPrompt}
 
@@ -258,16 +272,27 @@ Landing-page use case: ${state.useCase || "not provided"}
 Conversation so far:
 ${recentHistory || "No prior caller turns."}
 
+Relevant knowledge:
+${retrievedContext || "No relevant uploaded knowledge. Use only the agent context and ask a clear follow-up if needed."}
+
 Caller just said:
 ${transcript}
 
 Reply as a realistic phone receptionist.
 Rules:
-- Keep it short, warm, and natural.
+- Keep it short, warm, and natural: one or two spoken sentences, usually 10 to 25 words.
 - Ask only one question at a time.
-- Support English, Malayalam, Hindi, and mixed speech naturally.
+- End every turn with a clear handoff, question, confirmation, or wait cue.
+- Support English, Malayalam, Tamil, Telugu, Kannada, Hindi, and mixed Indian speech naturally.
+- If the caller uses Malayalam, Manglish, Tamil, Telugu, or Kannada, mirror simply and naturally; do not force pure English.
+- For non-English replies, prefer simple spoken words in English letters so phone TTS pronounces them cleanly.
+- Output plain spoken sentences only: no markdown, bullets, numbered lists, headers, or symbols.
+- The transcript can be noisy. If the caller's words are unclear or incoherent, ask them to repeat instead of guessing.
+- ${isFirstUserTurn ? "You may greet once if it fits." : "Do not repeat the opening greeting; answer the newest caller utterance directly."}
+- Vary phrasing; do not repeat the same sentence across turns.
 - Confirm important details.
 - If unsure, ask a clear follow-up.
+- Use uploaded knowledge only when relevant. Do not dump documents or invent missing facts.
 - Do not mention internal systems or providers.
 - Do not invent availability, price, or medical advice.`;
 }
@@ -276,6 +301,8 @@ async function playText(ws: WebSocket, state: CallState, text: string) {
   const started = Date.now();
   const pcm = await generateGeminiTtsPcm8khz({ text });
   state.assistantAudioQueued = true;
+  state.assistantProtectedUntil = Date.now() + 900;
+  state.bargeInFrames = 0;
   sendPcm(ws, pcm, phoneSampleRate, state.mediaEncoding);
   sendJson(ws, { event: "checkpoint", streamId: state.streamId, name: `assistant-${Date.now()}` });
   return Date.now() - started;
@@ -302,7 +329,7 @@ async function processTurn(ws: WebSocket, state: CallState, pcm: Buffer) {
       await transcribeGeminiPcm({
         pcm,
         sampleRate: phoneSampleRate,
-        languageHint: "English, Malayalam, Hindi, or mixed Indian speech"
+        languageHint: "English, Malayalam, Manglish, Tamil, Telugu, Kannada, Hindi, or mixed South Indian speech"
       })
     );
 
@@ -320,12 +347,34 @@ async function processTurn(ws: WebSocket, state: CallState, pcm: Buffer) {
     await recordMessage(state.callId, state.agentId, "user", transcript);
     state.history.push({ role: "user", content: transcript });
 
+    let knowledge: AgentKnowledgeChunk[] = [];
+    if (state.agentId) {
+      const retrievalStarted = Date.now();
+      try {
+        const retrieval = await retrieveRelevantKnowledge({
+          agentId: state.agentId,
+          query: `${transcript}\n${state.history.slice(-4).map((turn) => turn.content).join("\n")}`,
+          topK: 3
+        });
+        knowledge = retrieval.chunks;
+        await recordMessage(
+          state.callId,
+          state.agentId,
+          "system",
+          `RAG retrieved ${knowledge.length} chunk(s) in ${Date.now() - retrievalStarted} ms${retrieval.cached ? " (cached)" : ""}.`
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "unknown error";
+        await recordMessage(state.callId, state.agentId, "system", `RAG retrieval skipped: ${message.slice(0, 300)}`);
+      }
+    }
+
     const reply = cleanText(
       await generateGeminiText(
         [
           {
             role: "user",
-            text: buildReplyPrompt(state, transcript)
+            text: buildReplyPrompt(state, transcript, knowledge)
           }
         ],
         { temperature: 0.45, maxOutputTokens: 120 }
@@ -361,20 +410,37 @@ async function handleAudioFrame(ws: WebSocket, state: CallState, inboundLe: Buff
   const rms = rmsPcm16Le(frame);
   state.mediaFrames += 1;
   state.maxRms = Math.max(state.maxRms, rms);
+  const isSpeechLike = rms > speechRmsThreshold;
+  const isStrongSpeech = rms > bargeInRmsThreshold;
 
-  if (state.assistantAudioQueued && rms > bargeInRmsThreshold) {
-    state.assistantAudioQueued = false;
-    sendJson(ws, { event: "clearAudio", streamId: state.streamId });
+  if (state.assistantAudioQueued && Date.now() > state.assistantProtectedUntil && isStrongSpeech) {
+    state.bargeInFrames += 1;
+  } else if (!isStrongSpeech) {
+    state.bargeInFrames = 0;
   }
 
-  if (rms > speechRmsThreshold) {
+  if (state.assistantAudioQueued && state.bargeInFrames >= bargeInSpeechFrames) {
+    state.assistantAudioQueued = false;
+    state.bargeInFrames = 0;
+    sendJson(ws, { event: "clearAudio", streamId: state.streamId });
+    await recordMessage(state.callId, state.agentId, "system", `Barge-in accepted after ${bargeInSpeechFrames * 20} ms sustained caller speech.`);
+  }
+
+  if (isSpeechLike) {
     state.speechLikeFrames += 1;
     if (!state.inSpeech) {
+      state.candidateSpeechFrames += 1;
+      state.candidateBuffers.push(frame);
+      if (state.candidateBuffers.length > speechStartFrames + 4) state.candidateBuffers.shift();
+      if (state.candidateSpeechFrames < speechStartFrames) return;
       state.inSpeech = true;
       state.turnStartedAt = Date.now();
-      state.turnBuffers = [];
-      state.speechFrames = 0;
+      state.turnBuffers = [...state.candidateBuffers];
+      state.speechFrames = state.candidateSpeechFrames;
       state.silenceFrames = 0;
+      state.candidateBuffers = [];
+      state.candidateSpeechFrames = 0;
+      return;
     }
     state.speechFrames += 1;
     state.silenceFrames = 0;
@@ -382,6 +448,9 @@ async function handleAudioFrame(ws: WebSocket, state: CallState, inboundLe: Buff
   } else if (state.inSpeech) {
     state.silenceFrames += 1;
     state.turnBuffers.push(frame);
+  } else {
+    state.candidateSpeechFrames = 0;
+    state.candidateBuffers = [];
   }
 
   const reachedEnd = state.inSpeech && state.silenceFrames >= endSilenceFrames && state.speechFrames >= minSpeechFrames;
@@ -443,9 +512,13 @@ wss.on("connection", (ws, request) => {
         inSpeech: false,
         silenceFrames: 0,
         speechFrames: 0,
+        candidateSpeechFrames: 0,
+        candidateBuffers: [],
+        bargeInFrames: 0,
         turnBuffers: [],
         processing: false,
         assistantAudioQueued: false,
+        assistantProtectedUntil: 0,
         history: [],
         turnStartedAt: Date.now(),
         mediaFrames: 0,

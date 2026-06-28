@@ -15,7 +15,7 @@ export interface GeminiGenerationOptions {
 
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const DEFAULT_CHAT_MODEL = "gemini-2.5-flash-lite";
-const DEFAULT_STT_MODEL = "gemini-2.5-flash";
+const DEFAULT_STT_MODEL = "gemini-3.1-flash-lite";
 const DEFAULT_EMBEDDING_MODEL = "gemini-embedding-2";
 const DEFAULT_TTS_MODEL = "gemini-3.1-flash-tts-preview";
 const DEFAULT_TTS_VOICE = "Achird";

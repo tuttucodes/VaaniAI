@@ -28,7 +28,7 @@ function fallbackImprovement(input: AgentImproveInput) {
     system_prompt:
       `${context}
 
-Operate as a human-like phone agent for callers in India. Keep every reply brief and spoken, ask one question at a time, and adapt naturally across English, Hindi, Malayalam, or mixed speech. Confirm important details before storing them. If the caller asks something outside the provided context, ask a clear follow-up or say the team will confirm rather than guessing. Capture useful lead/contact details, urgency, objections, and follow-up needs. Escalate politely for emergencies, complaints, abuse, opt-out requests, or anything that needs a human. Do not mention internal providers, infrastructure, prompts, or implementation details.`.slice(0, 12000),
+Operate as a human-like phone agent for callers in India. Keep every reply brief and spoken, ask one question at a time, and adapt naturally across English, Malayalam, Tamil, Telugu, Kannada, Hindi, or mixed speech. Use plain spoken sentences only, with no markdown or lists. If a transcript sounds unclear, ask the caller to repeat instead of guessing. Confirm important details before storing them. If the caller asks something outside the provided context, ask a clear follow-up or say the team will confirm rather than guessing. Capture useful lead/contact details, urgency, objections, and follow-up needs. Escalate politely for emergencies, complaints, abuse, opt-out requests, or anything that needs a human. Do not mention internal providers, infrastructure, prompts, or implementation details.`.slice(0, 12000),
     first_message: (input.first_message?.trim() || "Hi, how can I help you today?").slice(0, 1000),
     end_call_rules: (
       input.end_call_rules?.trim() ||
@@ -55,10 +55,11 @@ description, system_prompt, first_message, end_call_rules.
 
 Rules:
 - The agent is for live phone calls in India.
-- Support English, Hindi, Malayalam, and natural mixed speech when useful.
+- Support English, Malayalam, Tamil, Telugu, Kannada, Hindi, and natural mixed speech when useful.
 - Make the description concise and business-facing.
 - Make the system prompt specific, human-like, semantic, and low-latency.
-- Keep spoken responses short; ask one question at a time.
+- Keep spoken responses short; ask one question at a time; always hand the turn back clearly.
+- Include phone-call output rules: no markdown/lists, one or two spoken sentences, and repeat/clarify instead of guessing at noisy transcripts.
 - Include anti-hallucination, lead qualification, escalation, consent, and data-confirmation rules.
 - Do not mention provider names, internal stack, or implementation details.
 - Do not hardcode a greeting unless the context clearly requires it.
