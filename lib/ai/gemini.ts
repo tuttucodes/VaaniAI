@@ -15,10 +15,10 @@ export interface GeminiGenerationOptions {
 
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const DEFAULT_CHAT_MODEL = "gemini-2.5-flash-lite";
-const DEFAULT_STT_MODEL = "gemini-3.1-flash-lite";
+const DEFAULT_STT_MODEL = "gemini-2.5-flash";
 const DEFAULT_EMBEDDING_MODEL = "gemini-embedding-2";
-const DEFAULT_TTS_MODEL = "gemini-3.1-flash-tts-preview";
-const DEFAULT_TTS_VOICE = "Achird";
+const DEFAULT_TTS_MODEL = "gemini-2.5-flash-preview-tts";
+const DEFAULT_TTS_VOICE = "Despina";
 const EMBEDDING_DIMENSION = 768;
 const GEMINI_TTS_SAMPLE_RATE = 24000;
 const PHONE_TTS_SAMPLE_RATE = 8000;
@@ -266,17 +266,75 @@ export async function transcribeGeminiPcm({
     .trim();
 }
 
+export async function transcribeGeminiAudio({
+  audio,
+  mimeType,
+  languageHint = "English, Malayalam, Manglish, Tamil, Telugu, Kannada, Hindi, or mixed Indian speech"
+}: {
+  audio: Buffer;
+  mimeType: string;
+  languageHint?: string;
+}) {
+  if (!isGeminiConfigured()) throw new Error("GEMINI_API_KEY is required for Gemini STT.");
+  if (!audio.length) return "";
+
+  const response = await fetch(`${GEMINI_API_BASE}/models/${getSttModel()}:generateContent?key=${requireEnv("GEMINI_API_KEY")}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `Transcribe this browser microphone audio. Language may be ${languageHint}. Return only the spoken words. If there is no clear speech, return an empty string.`
+            },
+            {
+              inlineData: {
+                mimeType,
+                data: audio.toString("base64")
+              }
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        temperature: 0,
+        maxOutputTokens: 320
+      }
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Gemini browser STT failed: ${response.status} ${await response.text()}`);
+  }
+
+  const data = (await response.json()) as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  };
+  const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim() || "";
+  return text
+    .replace(/^```[\s\S]*?\n?/, "")
+    .replace(/```$/g, "")
+    .replace(/^["'“”]+|["'“”]+$/g, "")
+    .trim();
+}
+
 export async function generateGeminiTtsWav({
   text,
   voice = getTtsVoice(),
-  model = getTtsModel()
+  model = getTtsModel(),
+  sampleRate = PHONE_TTS_SAMPLE_RATE
 }: {
   text: string;
   voice?: string;
   model?: string;
+  sampleRate?: number;
 }) {
-  const pcm = await generateGeminiTtsPcm8khz({ text, voice, model });
-  return pcmToWav(pcm);
+  const pcm = await generateGeminiTtsPcm({ text, voice, model, sampleRate });
+  return pcmToWav(pcm, sampleRate);
 }
 
 export async function generateGeminiTtsPcm8khz({
@@ -287,6 +345,20 @@ export async function generateGeminiTtsPcm8khz({
   text: string;
   voice?: string;
   model?: string;
+}) {
+  return generateGeminiTtsPcm({ text, voice, model, sampleRate: PHONE_TTS_SAMPLE_RATE });
+}
+
+export async function generateGeminiTtsPcm({
+  text,
+  voice = getTtsVoice(),
+  model = getTtsModel(),
+  sampleRate = PHONE_TTS_SAMPLE_RATE
+}: {
+  text: string;
+  voice?: string;
+  model?: string;
+  sampleRate?: number;
 }) {
   if (!isGeminiConfigured()) throw new Error("GEMINI_API_KEY is required for Gemini TTS.");
 
@@ -301,7 +373,7 @@ export async function generateGeminiTtsPcm8khz({
         {
           parts: [
             {
-              text: `Say: ${text}`
+              text: `Read this aloud in a warm, natural female receptionist voice for a phone call. Speak only this line: ${text}`
             }
           ]
         }
@@ -329,7 +401,8 @@ export async function generateGeminiTtsPcm8khz({
   const encoded = data.candidates?.[0]?.content?.parts?.find((part) => part.inlineData?.data)?.inlineData?.data;
   if (!encoded) throw new Error(`Gemini TTS response did not include audio for ${model}.`);
 
-  return downsamplePcm16Mono(Buffer.from(encoded, "base64"));
+  const pcm = Buffer.from(encoded, "base64");
+  return sampleRate === GEMINI_TTS_SAMPLE_RATE ? pcm : downsamplePcm16Mono(pcm, GEMINI_TTS_SAMPLE_RATE, sampleRate);
 }
 
 export async function* streamGeminiText(messages: GeminiChatMessage[], options: GeminiGenerationOptions = {}) {

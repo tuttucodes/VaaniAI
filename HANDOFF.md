@@ -82,7 +82,7 @@ Current Vaani implementation:
 - Gemini runtime defaults are now in code:
   - text replies default to `gemini-2.5-flash-lite`
   - TTS defaults to `gemini-3.1-flash-tts-preview`
-  - voice defaults to `Achird`
+  - voice defaults to Gemini female voice `Despina`
   - TTS auto-enables when `GEMINI_API_KEY` is configured unless `GEMINI_TTS_ENABLED=false`
 - LiveKit: Cloud project credentials work for token creation. For real phone-call audio with sub-second latency, keep LiveKit Cloud and deploy the voice worker as an always-on service on DigitalOcean/Fly/Render. Netlify functions are not suitable for a persistent LiveKit media worker.
 - Vobiz/LiveKit production setup still needs Vobiz SIP trunk username and password. Auth ID/token are only for REST/XML APIs; LiveKit SIP outbound trunk requires SIP domain, username, password, and caller ID number.
@@ -158,7 +158,7 @@ LIVEKIT_API_KEY
 LIVEKIT_API_SECRET
 VOBIZ_BASE_URL=https://api.vobiz.ai/api/v1
 VOBIZ_AUTH_ID
-VOBIZ_AUTH_SECRET
+VOBIZ_AUTH_TOKEN
 VOBIZ_WEBHOOK_SECRET
 VOBIZ_PHONE_NUMBER
 DEFAULT_FROM_NUMBER
@@ -248,11 +248,12 @@ Latest production test after commit `17193d0`:
 
 ## Production Vobiz/LiveKit Checklist
 
-- Vobiz REST/XML: `VOBIZ_AUTH_ID`, `VOBIZ_AUTH_SECRET`, `VOBIZ_BASE_URL`, `VOBIZ_PHONE_NUMBER`.
+- Vobiz REST/XML: `VOBIZ_AUTH_ID`, `VOBIZ_AUTH_TOKEN`, `VOBIZ_BASE_URL`, `VOBIZ_PHONE_NUMBER`. Legacy local env names `VOBIZ_AUTH_SECRET`/`VOBIZ_API_KEY` still work as adapter fallbacks only.
 - Vobiz SIP trunk for LiveKit: SIP domain, SIP username, SIP password, caller ID number, trunk ID if available.
 - LiveKit: `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, outbound SIP trunk ID after provisioning.
 - Vobiz inbound: route the Vobiz number/application/SIP trunk to LiveKit SIP URI or to Vobiz Stream XML answer URL.
 - Vobiz Stream: deploy `npm run worker:vobiz-stream` on an always-on host with public TLS WebSocket URL, then set `PUBLIC_DEMO_USE_STREAM=true` and `VOBIZ_STREAM_WS_URL=wss://...`.
+- Vobiz console TODO before demos: confirm outbound country access, active caller ID/number, KYC/balance/CPS limits, and callback routing for HTTPS answer/ring/hangup/Stream-status URLs.
 - Netlify remains the dashboard/API/callback host. It should not be used for the persistent WebSocket media worker.
 
 ## Notes For Next Engineer
@@ -430,3 +431,197 @@ Latest production test after commit `17193d0`:
   - Cloud Run worker deployed as revision `vaani-vobiz-stream-00008-gbt`, serving 100 percent traffic.
   - Health OK: `https://vaani-vobiz-stream-881777363529.asia-south1.run.app/health`.
   - WebSocket smoke OK: worker returned `playAudio` with `contentType=audio/x-mulaw`, `sampleRate=8000`, `payloadBytes=160`, and a checkpoint.
+
+## 2026-06-28 Voice Quality Hotfix
+
+- User reported the dental test call sounded bad and not female enough.
+- Confirmed `Achird` was the code default; Gemini docs list it as a male voice. Changed default Gemini TTS voice to female `Despina`.
+- TTS prompt now asks Gemini to read the line as a warm, natural female receptionist voice.
+- Worker now stores the opening assistant message in runtime history so the model does not greet again after the caller says hello.
+- Added a fast greeting/root-canal follow-up path for the public dental demo so "hello" moves directly to pain/swelling triage instead of re-greeting.
+- Added unclear-short-transcript handling so bad STT like only `₹500` asks the caller to repeat instead of producing a useless reply.
+- Worker marks the WebSocket as closed and no longer processes buffered audio or records/sends assistant replies after the call stream has ended.
+
+## 2026-06-28 Vobiz Phone Demo Readiness Hardening
+
+- Reconfirmed the Retail Daddy working pattern: REST/XML auth is `VOBIZ_AUTH_ID` + `VOBIZ_AUTH_TOKEN`; answer handlers should return bidirectional `<Stream keepCallAlive="true" contentType="audio/x-mulaw;rate=8000">`; media is 8 kHz mu-law in 20 ms chunks; outbound WS control frames are `playAudio` and `clearAudio`.
+- Adapter now prefers `VOBIZ_AUTH_TOKEN` while preserving legacy `VOBIZ_AUTH_SECRET`/`VOBIZ_API_KEY` fallbacks, sends documented `X-Auth-ID`/`X-Auth-Token` headers, preserves leading `+` in dial strings, and returns explicit missing-config / HTTP status diagnostics.
+- Worker now defaults missing Vobiz stream metadata to `audio/x-mulaw`, forces outbound mu-law chunks to 160 bytes at 8 kHz, handles `clearedAudio` acks, and mirrors stream lifecycle/errors to process logs as well as `call_messages`.
+- README now documents the required Vobiz console checks for caller ID, outbound country access, balance/CPS/KYC, and public callback routing.
+
+## 2026-06-28 Gemini Live Phone Demo Baseline
+
+- Current production media worker is Cloud Run service `vaani-vobiz-stream`.
+  - URL: `https://vaani-vobiz-stream-881777363529.asia-south1.run.app`
+  - Health: `/health` returns `{ ok: true, worker: "vobiz-stream-agent", mode: "gemini-live" }`.
+  - Latest deployed revision before this handoff update: `vaani-vobiz-stream-00025-stq`.
+  - Important runtime env:
+    - `GEMINI_LIVE_MODEL=gemini-3.1-flash-live-preview`
+    - `GEMINI_LIVE_VOICE=Leda`
+    - `GEMINI_LIVE_LANGUAGE_CODE=ml-IN`
+    - `VOBIZ_LIVE_END_SILENCE_MS=950`
+    - `VOBIZ_LIVE_BARGE_IN_VOICE_MS=560`
+    - `VOBIZ_LIVE_BARGE_IN_RMS=0.065`
+    - `VOBIZ_LIVE_GREETING_PROTECT_MS=1000`
+  - Cloud Run scale is currently min instances `0`, max instances `1`. This controls cost but can add a cold-start hit. For client demos, set min instances `1` only during the demo window, then restore `0`.
+- Latest long dental call used for analysis:
+  - App call id: `c4fa4381-b71f-49e9-9666-d3b64694e67e`
+  - Vobiz call id: `009a00df-c2ff-45cf-9edb-798a9c2103e6`
+  - Status: completed; Vobiz normal hangup by callee.
+  - Duration: `243s`; billsec: `237s`.
+  - Vobiz call cost: `₹1.80`; streaming: `₹0.80`; known Vobiz total: `₹2.60`.
+  - Vobiz-only cost/min: roughly `₹0.64`.
+  - Estimated all-in with Gemini: `₹7.46-₹10.30` total, about `₹1.84-₹2.54/min`.
+  - Media quality: MOS `4.5`, jitter `0ms`, packet loss `0.07%`, codec `PCMU`.
+  - First-audio latency samples: `[556,0,0,0,0,0,1,0,1,0,0,1,1,159,0,1,0,0]`.
+  - Average first audio: `40ms`; non-zero average: `103ms`; max: `556ms`.
+  - Full assistant turn average: about `8340ms`; this is spoken completion time, not perceived first response.
+  - Barge-in events: `6`.
+- Transcript quality problems from that call:
+  - Opening was closer to the goal: “Pearl Dental Care Kochi aanu, Maya aanu. Ippol samsarikkan pattumo?”
+  - The model still used the wrong name `Eshan` after the caller corrected to `Rahul`.
+  - It drifted into teeth whitening scheduling without clean confirmation.
+  - It sometimes asked more than one question per turn.
+  - It said a hard “Bye” at the end. The desired close is softer: ask whether anything else is needed, then thank and let the clinic confirm.
+  - Malayalam/Manglish needs to be warmer and less translated; avoid rude, forceful, diagnosis-like language.
+- Product decision for production-level demos:
+  - Do not let Gemini Live be the only state manager. Use Gemini Live for natural audio and fast speech, but keep a small deterministic call controller around it.
+  - The controller should track confirmed name, consent/permission, appointment reason, symptom flags, preferred time, callback number, language preference, and whether the caller is done.
+  - Never feed unverified landing-page use-case text as caller truth. It is background only.
+  - For dental demos, start with permission and do not use a caller name until the caller says it in the call.
+  - For client demos, keep answers short and start with a tiny natural phrase to keep perceived latency below 300-400ms.
+- Cost and latency guardrails:
+  - Keep Cloud Run min instances `0` when idle. Temporarily use `1` for live demos if cold starts hurt.
+  - Keep calls short; collect only the needed appointment facts.
+  - Keep output concise to reduce Gemini Live audio generation cost and call duration.
+  - Avoid live post-call analysis while the call is in progress. Run analysis after hangup.
+  - Use RAG only when the caller asks a knowledge question; skip retrieval for routine scheduling turns.
+  - To approach sub-300ms perceived latency: pre-warm worker, use Gemini Live, keep prompt compact, keep the first response phrase short, tune VAD endpointing around 700-950ms, and avoid large context injection during the live turn.
+
+## 2026-06-28 Dental Demo Guardrail Deploy
+
+- Patch goal: make the Pearl Dental phone demo safer and less rude before another live call.
+- Changes made:
+  - Dental calls no longer pass the landing-page/form name as a verified caller name to Gemini. The caller name is `unknown` until spoken in the call.
+  - Dental opening instruction forbids using caller name or mentioning root canal/whitening/symptoms in the first line.
+  - Dental prompt treats root canal, whitening, appointment reason, and form use-case text as unverified background only.
+  - Added lightweight call-fact extraction in the worker for corrected caller name, appointment reason, preferred time, callback number, consent, and caller-done state.
+  - Default Gemini Live VAD/barge-in settings are now less sensitive: start voice `360ms`, end silence `950ms`, barge-in RMS `0.065`, barge-in voice `560ms`.
+  - Public dental fallback opening no longer says `Hi {name}`.
+- Verification before deploy:
+  - `npm run typecheck -- --pretty false` passed.
+  - `npm run build` passed.
+  - `git diff --check` passed.
+- Cloud Build image:
+  - `asia-south1-docker.pkg.dev/project-519d9218-f822-42ae-823/vaani/vobiz-stream:dental-state-20260628230845`
+- Cloud Run deploy:
+  - Revision `vaani-vobiz-stream-00026-g9p`
+  - Health OK: `https://vaani-vobiz-stream-881777363529.asia-south1.run.app/health`
+  - Health response: `{ ok: true, worker: "vobiz-stream-agent", mode: "gemini-live" }`
+
+## 2026-06-29 Dental Wording Fix Deploy
+
+- Re-authenticated Google Cloud CLI as `raybkmedia@gmail.com`.
+- Active project reset to `project-519d9218-f822-42ae-823`.
+- ADC quota project also set to `project-519d9218-f822-42ae-823`.
+- Latest tested call before this patch:
+  - App call id: `da58d1f1-f2dd-437b-90ad-191126d6d486`
+  - Vobiz call id: `1f8b6447-4c3a-4033-a4af-13db1f5e2103`
+  - Status: completed after user manually cut the call.
+  - Spoken path worked. Caller was transcribed in Malayalam/Manglish and assistant responded.
+  - Bad wording observed:
+    - pre-stream stored opener: `Can I record this call for quality purposes?`
+    - assistant phrase: `Kure neram aayallo, oru callback request request...`
+    - assistant phrase: `clinic angane confirm cheyyum`
+    - awkward service response for whitening.
+  - First audio: cold/opening `589ms`, subsequent turns `0-1ms`.
+- Fixes made:
+  - Dental Live prompt now gives natural Kochi receptionist phrase examples and forbids exact awkward phrases: `request request`, `kure neram aayallo`, `clinic angane confirm cheyyum`, `enthu specifically help cheyyana`.
+  - Dental services answer is constrained to public receptionist level: cleaning, filling, root canal, whitening, braces consultation.
+  - Whitening answer is constrained: doctor/team should explain after checking; offer consultation/callback, never invent price/duration/safety.
+  - Public demo opening generation now forbids recording/quality/automation/policy mentions.
+  - Demo hangup analysis now ignores pre-stream stored assistant rows and analyzes only user/assistant turns after `Vobiz stream started`.
+- Verification:
+  - `npm run typecheck -- --pretty false` passed.
+- Cloud Build image:
+  - `asia-south1-docker.pkg.dev/project-519d9218-f822-42ae-823/vaani/vobiz-stream:dental-wording-20260629000613`
+- Cloud Run deploy:
+  - Revision `vaani-vobiz-stream-00027-66z`
+  - Health OK: `https://vaani-vobiz-stream-881777363529.asia-south1.run.app/health`
+  - Health response: `{ ok: true, worker: "vobiz-stream-agent", mode: "gemini-live" }`
+- Note: the spoken wording fix is live via Cloud Run. The public-demo opening/hangup analysis cleanup is in the repo but requires the next Netlify deploy to affect production web callbacks.
+
+## 2026-06-29 Current Task: Dashboard + Sarvam-Style Browser Voice
+
+- User wants all of this connected back into the live dashboard and a Sarvam-style web voice demo.
+- Decision:
+  - Reuse the same Cloud Run streaming worker and Gemini Live path for browser voice.
+  - Browser replaces Vobiz as the audio rail: mic PCM frames go directly to the worker WebSocket; worker sends the same assistant audio frames back; browser decodes and plays them.
+  - Keep Vobiz phone calls on the same worker path, so tuning prompts/VAD benefits both phone and browser demos.
+  - Avoid Chrome/Safari built-in speech recognition and avoid record-then-upload for the primary demo. Those can remain only as fallback/dev endpoints.
+- Implementation plan:
+  - Add a server route that returns a browser WebSocket session URL using `VOBIZ_STREAM_WS_URL`, without exposing raw server env logic in client code.
+  - Extend `workers/vobiz-stream-agent.ts` to recognize `transport=browser`, accept `audio/x-l16le` PCM frames, and send transcript events back to the browser UI.
+  - Rewrite `/voice-demo` component so clicking a scenario starts continuous mic streaming and the agent speaks first.
+  - Keep dashboard/call history compatibility by optionally creating/storing a Supabase call row for browser sessions later; immediate demo can work without a DB row because the browser receives transcript events live.
+  - After local verification, deploy Cloud Run worker and Netlify only once.
+
+## 2026-06-29 Browser Voice + Dashboard Integration Update
+
+- Implemented the browser voice demo on the same always-on Gemini Live streaming worker used by Vobiz calls.
+- Browser transport:
+  - `/api/public/browser-voice-session` creates a real Supabase `calls` row under the matching public demo agent, then returns a `wss://` worker URL with `transport=browser`.
+  - Browser mic audio is sent as raw `audio/x-l16le` PCM at 8 kHz.
+  - Worker decodes browser PCM, streams it to Gemini Live, and streams assistant audio frames back to the browser.
+  - Worker sends browser-only live events:
+    - `{ event: "latency", metric: "first_audio", latency_ms }`
+    - `{ event: "transcript", role, content, latency_ms }`
+  - Browser page decodes mu-law or PCM assistant frames and schedules low-latency playback through Web Audio.
+- Dashboard integration:
+  - Added `/dashboard/voice`.
+  - Added `Voice lab` to the dashboard sidebar.
+  - The dashboard voice page embeds the same Sarvam-style browser voice demo.
+  - Browser sessions now appear in dashboard call history as `browser-demo`, with status/duration/estimated cost.
+- Current Sarvam-style page:
+  - `/voice-demo`
+  - Three sample cards:
+    - Cart Recovery / Vaani Stores
+    - Appointment Booking / Vaani Hospitals
+    - Payment Follow-ups / Vaani Finance
+  - The agent speaks first after Start.
+  - The agent context textarea can be edited before starting a scenario.
+- Persistence/metrics:
+  - Worker marks stream calls `in_progress` on stream start.
+  - Worker marks stream calls `completed` on WebSocket close.
+  - Worker writes `call_messages` system lifecycle rows and first-audio latency.
+  - Worker writes rough `call_metrics` including first-audio latency, interruption count, duration-derived cost estimate.
+  - Live assistant transcript rows depend on Gemini Live `outputAudioTranscription` arriving before the stream closes; short smoke tests that close after first audio may only show system rows.
+- Verification completed:
+  - `npm run typecheck -- --pretty false` passed.
+  - `npm run build` passed.
+  - `git diff --check` passed.
+  - Local `/api/public/browser-voice-session` returns a real persisted call id and worker WebSocket URL.
+  - Deployed worker health OK: `https://vaani-vobiz-stream-881777363529.asia-south1.run.app/health`.
+  - Direct browser-style WebSocket smoke against Cloud Run succeeded: got assistant audio and first-audio latency `602ms`; Supabase row was completed with lifecycle messages.
+  - Local `/voice-demo` renders the three scenario cards after restarting dev server.
+  - Local `/dashboard/voice` renders after logging in with the seeded demo user.
+- Latest worker deploy:
+  - Image: `asia-south1-docker.pkg.dev/project-519d9218-f822-42ae-823/vaani/vobiz-stream:browser-persist-20260629005236`
+  - Cloud Run revision: `vaani-vobiz-stream-00029-nct`
+  - URL: `https://vaani-vobiz-stream-881777363529.asia-south1.run.app`
+  - Health response: `{ ok: true, worker: "vobiz-stream-agent", mode: "gemini-live" }`
+- Local dev:
+  - Running on `http://localhost:3002`.
+  - Started with `VOBIZ_STREAM_WS_URL=wss://vaani-vobiz-stream-881777363529.asia-south1.run.app`.
+  - Demo credentials:
+    - email: `demo@vaani.local`
+    - password: `VaaniDemo123!`
+- Important current caveat:
+  - In-app browser/live browser testing still needs user microphone permission. Do not accept mic permission on the user's behalf without explicit confirmation.
+  - If the page says microphone is blocked, the user should allow mic for `localhost:3002` and click Start again.
+- Next recommended steps:
+  1. Let the user manually allow microphone on `/voice-demo` or `/dashboard/voice`, then run a real spoken test.
+  2. Watch Cloud Run logs for `transport: "browser"`, `Gemini Live first audio`, and transcript events.
+  3. If transcript events lag behind audio, keep audio-first behavior and show transcript when Gemini completes the turn; do not block first audio on transcript.
+  4. Batch frontend changes into one GitHub push so Netlify deploys once.
+  5. Before production demo, confirm Netlify has `VOBIZ_STREAM_WS_URL=wss://vaani-vobiz-stream-881777363529.asia-south1.run.app`.

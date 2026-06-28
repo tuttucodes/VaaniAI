@@ -76,6 +76,13 @@ export default function HomePage() {
               Open dashboard
               <ArrowRight className="size-4" />
             </Link>
+            <Link
+              href="/voice-demo"
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-md border border-black/15 bg-white px-6 text-sm font-semibold text-[#0b0710] transition hover:bg-black hover:text-white"
+            >
+              Talk in browser
+              <Sparkles className="size-4" />
+            </Link>
           </div>
           <p className="mt-8 max-w-2xl text-sm leading-6 text-[#706779]">
             Built for receptionist calls, lead qualification, appointment booking, reminders, and service follow-ups where callers switch language mid-sentence.

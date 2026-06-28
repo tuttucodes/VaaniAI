@@ -49,7 +49,9 @@ Implemented:
 
 - XML outbound call creation through `/Account/{VOBIZ_AUTH_ID}/Call/`.
 - `X-Auth-ID` and `X-Auth-Token` auth headers.
-- Public demo callback URLs for answer, ring, gather, and hangup.
+- Public demo callback URLs for answer, ring, Stream status, and hangup.
+- Vobiz Stream answer XML defaults to `<Stream bidirectional="true" keepCallAlive="true" contentType="audio/x-mulaw;rate=8000">`.
+- The Stream worker sends `playAudio`/`clearAudio` WebSocket frames using 8 kHz mu-law 20 ms chunks.
 - Generic webhook handler with signature verification when `VOBIZ_WEBHOOK_SECRET` is set.
 
 Still provider-specific:
@@ -103,25 +105,29 @@ GEMINI_API_KEY=...
 LIVEKIT_URL=...
 LIVEKIT_API_KEY=...
 LIVEKIT_API_SECRET=...
-VOBIZ_API_KEY=...
 VOBIZ_BASE_URL=...
 VOBIZ_AUTH_ID=...
-VOBIZ_AUTH_SECRET=...
+VOBIZ_AUTH_TOKEN=...
 VOBIZ_WEBHOOK_SECRET=...
 VOBIZ_PHONE_NUMBER=...
+VOBIZ_STREAM_WS_URL=wss://...
+PUBLIC_DEMO_USE_STREAM=true
+VOBIZ_STREAM_CONTENT_TYPE=audio/x-mulaw;rate=8000
 VOBIZ_OUTBOUND_CALL_PATH=...
 VOBIZ_HANGUP_CALL_PATH=...
 DEFAULT_FROM_NUMBER=...
 NEXT_PUBLIC_APP_URL=...
 ```
 
-Gemini model and voice settings are optional. The app defaults to `gemini-2.5-flash-lite` for fast text replies and Gemini Flash TTS for generated phone audio when `GEMINI_API_KEY` is present. Add `GEMINI_CHAT_MODEL`, `GEMINI_TTS_ENABLED`, `GEMINI_TTS_MODEL`, or `GEMINI_TTS_VOICE` only when you want to override those defaults.
+Gemini model and voice settings are optional. The app defaults to `gemini-2.5-flash-lite` for fast text replies and Gemini Flash TTS with the female `Despina` voice for generated phone audio when `GEMINI_API_KEY` is present. Add `GEMINI_CHAT_MODEL`, `GEMINI_TTS_ENABLED`, `GEMINI_TTS_MODEL`, or `GEMINI_TTS_VOICE` only when you want to override those defaults.
 
 For Vobiz, REST calling and production realtime voice need different credentials:
 
-- REST/XML calls need `VOBIZ_AUTH_ID`, `VOBIZ_AUTH_SECRET`, `VOBIZ_BASE_URL`, and a Vobiz caller ID number.
+- REST/XML calls need `VOBIZ_AUTH_ID`, `VOBIZ_AUTH_TOKEN`, `VOBIZ_BASE_URL`, and a Vobiz caller ID number. The adapter still accepts legacy `VOBIZ_AUTH_SECRET`/`VOBIZ_API_KEY` aliases, but new setup should use `VOBIZ_AUTH_TOKEN`.
 - LiveKit SIP needs the Vobiz SIP trunk domain, SIP username, SIP password, and the Vobiz phone number mapped into a LiveKit outbound trunk.
 - Low-latency Vobiz Stream needs an always-on public `wss://` worker URL. Set `PUBLIC_DEMO_USE_STREAM=true` and `VOBIZ_STREAM_WS_URL=wss://...` only after deploying `npm run worker:vobiz-stream` on a VM/container host. Netlify cannot host the persistent WebSocket media loop.
+- TODO in the Vobiz console before a phone demo: confirm outbound calling is enabled for the destination country, the caller ID/number is active, KYC/balance/CPS limits are clear, and the number/application is allowed to fetch public HTTPS answer, ring, hangup, and Stream-status callbacks.
+- TODO for inbound demos: route the Vobiz number/application to an HTTPS answer URL that returns Stream XML, or to the configured SIP/LiveKit path after the SIP trunk is provisioned.
 
 4. Apply Supabase migrations:
 
@@ -256,7 +262,7 @@ Send these when ready:
 - Supabase project ref, URL, anon key, and service-role key.
 - Gemini API key.
 - LiveKit URL, API key, and API secret.
-- Vobiz API documentation or sample curl for outbound calls.
+- Vobiz console confirmation for outbound country access, caller ID, balance/CPS limits, and callback URL routing.
 - Vobiz webhook sample payloads for inbound, ringing, answered, completed, failed, and recording-ready events.
 - Vobiz webhook signature header/HMAC rule.
 - SIP trunk or bridge details for connecting Vobiz audio into LiveKit.

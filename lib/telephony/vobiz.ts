@@ -3,8 +3,9 @@ import { getEnv } from "@/lib/env";
 import type { OutboundCallRequest, OutboundCallResult, TelephonyProvider, TelephonyWebhookResult } from "./provider";
 
 const TODO_ITEMS = [
-  "TODO: confirm exact Vobiz outbound call API path and request body.",
-  "TODO: confirm Vobiz auth header format beyond API key bearer token.",
+  "TODO: configure the Vobiz number/application in the Vobiz console for outbound XML calls.",
+  "TODO: confirm the Vobiz console has outbound calling enabled for the target country and caller ID.",
+  "TODO: confirm the answer_url returns a bidirectional Stream XML response with audio/x-mulaw;rate=8000.",
   "TODO: confirm SIP trunk / LiveKit bridge fields accepted by Vobiz.",
   "TODO: confirm Vobiz webhook event names and payload field mapping.",
   "TODO: confirm Vobiz webhook signature header and HMAC format."
@@ -23,8 +24,26 @@ function buildUrl(pathEnvName: string) {
 
 function vobizAuth() {
   const authId = getEnv("VOBIZ_AUTH_ID");
-  const authToken = getEnv("VOBIZ_AUTH_SECRET") || getEnv("VOBIZ_API_KEY");
+  const authToken = getEnv("VOBIZ_AUTH_TOKEN") || getEnv("VOBIZ_AUTH_SECRET") || getEnv("VOBIZ_API_KEY");
   return { authId, authToken };
+}
+
+async function parseResponseBody(response: Response) {
+  const text = await response.text().catch(() => "");
+  if (!text) return {};
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return { body: text.slice(0, 1000) };
+  }
+}
+
+function vobizHeaders(authId: string, authToken: string) {
+  return {
+    "Content-Type": "application/json",
+    "X-Auth-ID": authId,
+    "X-Auth-Token": authToken
+  };
 }
 
 function vobizCallUrl() {
@@ -45,7 +64,18 @@ function vobizRecordingUrl(providerCallId: string) {
 }
 
 function toVobizDialString(number?: string) {
-  return (number || "").replace(/[^\d+]/g, "").replace(/^\+/, "");
+  const clean = (number || "").replace(/[^\d+]/g, "");
+  return clean.startsWith("+") ? `+${clean.slice(1).replace(/\+/g, "")}` : clean.replace(/\+/g, "");
+}
+
+function missingXmlCallConfig(input: { url: string | null; authId?: string; authToken?: string; from?: string; to?: string }) {
+  const missing: string[] = [];
+  if (!input.url) missing.push("VOBIZ_BASE_URL or VOBIZ_AUTH_ID");
+  if (!input.authId) missing.push("VOBIZ_AUTH_ID");
+  if (!input.authToken) missing.push("VOBIZ_AUTH_TOKEN");
+  if (!input.from) missing.push("VOBIZ_PHONE_NUMBER or DEFAULT_FROM_NUMBER");
+  if (!input.to) missing.push("destination phone number");
+  return missing;
 }
 
 function verifySignature(body: string, signature: string | null) {
@@ -90,10 +120,7 @@ export async function fetchVobizRecordingUrl(providerCallId: string) {
   try {
     const response = await fetch(url, {
       method: "GET",
-      headers: {
-        "x-auth-id": authId,
-        "x-auth-token": authToken
-      },
+      headers: vobizHeaders(authId, authToken),
       signal: AbortSignal.timeout(10_000)
     });
     if (!response.ok) return "";
@@ -121,27 +148,35 @@ export class VobizTelephonyProvider implements TelephonyProvider {
     const { authId, authToken } = vobizAuth();
     const from = toVobizDialString(request.from || getEnv("VOBIZ_PHONE_NUMBER") || getEnv("DEFAULT_FROM_NUMBER"));
     const to = toVobizDialString(request.to);
+    const missing = missingXmlCallConfig({ url, authId, authToken, from, to });
 
-    if (!url || !authId || !authToken || !from || !to) {
+    if (missing.length) {
       return {
         provider: "vobiz",
         status: "requires_configuration",
         todo: [
           "Set VOBIZ_BASE_URL=https://api.vobiz.ai/api/v1",
-          "Set VOBIZ_AUTH_ID and VOBIZ_AUTH_SECRET from Vobiz.",
+          "Set VOBIZ_AUTH_ID and VOBIZ_AUTH_TOKEN from Vobiz.",
           "Set VOBIZ_PHONE_NUMBER or DEFAULT_FROM_NUMBER to a Vobiz caller ID.",
-          "Use a public HTTPS app URL for answer_url callbacks."
-        ]
+          "Use a public HTTPS app URL for answer_url callbacks.",
+          "Deploy the Stream worker at a public wss:// URL and set VOBIZ_STREAM_WS_URL."
+        ],
+        raw: { missing }
       };
     }
 
-    const response = await fetch(url, {
+    const callUrl = url as string;
+    console.info("Creating Vobiz XML outbound call", {
+      to,
+      from,
+      answerUrl: request.answerUrl,
+      hasRingUrl: Boolean(request.ringUrl),
+      hasHangupUrl: Boolean(request.hangupUrl)
+    });
+
+    const response = await fetch(callUrl, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-auth-id": authId,
-        "x-auth-token": authToken
-      },
+      headers: vobizHeaders(authId, authToken),
       body: JSON.stringify({
         from,
         to,
@@ -156,15 +191,25 @@ export class VobizTelephonyProvider implements TelephonyProvider {
         caller_name: request.callerName || "Vaani AI",
         time_limit: request.timeLimitSeconds || 240,
         machine_detection: "false"
-      })
+      }),
+      signal: AbortSignal.timeout(15_000)
     });
 
-    const raw = await response.json().catch(() => ({}));
+    const raw = await parseResponseBody(response);
     if (!response.ok) {
+      console.error("Vobiz XML outbound call failed", {
+        status: response.status,
+        statusText: response.statusText,
+        raw
+      });
       return {
         provider: "vobiz",
         status: "failed",
-        raw
+        raw: {
+          status: response.status,
+          statusText: response.statusText,
+          ...raw
+        }
       };
     }
 
@@ -179,22 +224,26 @@ export class VobizTelephonyProvider implements TelephonyProvider {
 
   async createOutboundCall(request: OutboundCallRequest): Promise<OutboundCallResult> {
     const url = buildUrl("VOBIZ_OUTBOUND_CALL_PATH");
-    const apiKey = getEnv("VOBIZ_API_KEY");
+    const { authId, authToken } = vobizAuth();
 
-    if (!url || !apiKey) {
+    if (!url || !authId || !authToken) {
       return {
         provider: "vobiz",
         status: "requires_configuration",
-        todo: TODO_ITEMS
+        todo: TODO_ITEMS,
+        raw: {
+          missing: [
+            ...(!url ? ["VOBIZ_BASE_URL and VOBIZ_OUTBOUND_CALL_PATH"] : []),
+            ...(!authId ? ["VOBIZ_AUTH_ID"] : []),
+            ...(!authToken ? ["VOBIZ_AUTH_TOKEN"] : [])
+          ]
+        }
       };
     }
 
     const response = await fetch(url, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${apiKey}`
-      },
+      headers: vobizHeaders(authId, authToken),
       body: JSON.stringify({
         to: request.to,
         from: request.from,
@@ -209,45 +258,54 @@ export class VobizTelephonyProvider implements TelephonyProvider {
       })
     });
 
-    const raw = await response.json().catch(() => ({}));
+    const raw = await parseResponseBody(response);
     if (!response.ok) {
       return {
         provider: "vobiz",
         status: "failed",
-        raw
+        raw: {
+          status: response.status,
+          statusText: response.statusText,
+          ...raw
+        }
       };
     }
 
     return {
       provider: "vobiz",
       status: "queued",
-      providerCallId: raw.call_id || raw.id || raw.uuid,
+      providerCallId: String(raw.call_id || raw.id || raw.uuid || ""),
       raw
     };
   }
 
   async hangupCall(providerCallId: string) {
     const url = buildUrl("VOBIZ_HANGUP_CALL_PATH");
-    const apiKey = getEnv("VOBIZ_API_KEY");
+    const { authId, authToken } = vobizAuth();
 
-    if (!url || !apiKey) {
+    if (!url || !authId || !authToken) {
       return {
         ok: false,
-        raw: { todo: TODO_ITEMS, providerCallId }
+        raw: {
+          todo: TODO_ITEMS,
+          providerCallId,
+          missing: [
+            ...(!url ? ["VOBIZ_BASE_URL and VOBIZ_HANGUP_CALL_PATH"] : []),
+            ...(!authId ? ["VOBIZ_AUTH_ID"] : []),
+            ...(!authToken ? ["VOBIZ_AUTH_TOKEN"] : [])
+          ]
+        }
       };
     }
 
     const response = await fetch(url, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${apiKey}`
-      },
+      headers: vobizHeaders(authId, authToken),
       body: JSON.stringify({ call_id: providerCallId })
     });
 
-    const raw = await response.json().catch(() => ({}));
-    return { ok: response.ok, raw };
+    const raw = await parseResponseBody(response);
+    return { ok: response.ok, raw: response.ok ? raw : { status: response.status, statusText: response.statusText, ...raw } };
   }
 
   async handleWebhook(request: Request): Promise<TelephonyWebhookResult> {

@@ -61,7 +61,7 @@ export const publicDemoCallSchema = z.object({
     .min(8)
     .max(20)
     .regex(/^\+[1-9]\d{7,18}$/, "Use E.164 format, for example +919876543210"),
-  scenario: z.enum(["dental", "real_estate", "restaurant"]),
+  scenario: z.enum(["dental", "real_estate", "restaurant", "school"]),
   use_case: z.string().min(3).max(300)
 });
 

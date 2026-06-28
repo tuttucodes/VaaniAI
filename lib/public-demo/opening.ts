@@ -29,10 +29,14 @@ export async function generateDemoOpeningLine({
           role: "user",
           text: `${scenario.systemPrompt}
 
-Caller name: ${name}
+Caller name: ${scenario.id === "dental" ? "unknown until the caller confirms it in the live call" : name}
 Landing-page use case: ${useCase || "not provided"}
 
-Start this phone call. Use one short, warm opening line and one clear question. No paragraphs. Sound like a real receptionist in India. If the caller requested a language mix, reflect it lightly.`
+Start this phone call. Use one short, warm opening line and one clear question.
+The landing-page use case is background context only. Do not quote it, roleplay it as the caller, or say "I had..." on behalf of the caller.
+For dental calls, do not use the form name in the opening line.
+Do not ask to record the call. Do not mention call quality, recording consent, automation, or internal policy.
+No paragraphs. Sound like a real receptionist in India. If the caller requested a language mix, reflect it lightly.`
         }
       ],
       { temperature: 0.55, maxOutputTokens: 80 }

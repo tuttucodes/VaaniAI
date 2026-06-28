@@ -14,7 +14,14 @@ export async function POST(request: NextRequest) {
   const recordingUrl = call.vobiz_call_id ? await fetchVobizRecordingUrl(call.vobiz_call_id).catch(() => "") : "";
 
   const { data: messages } = await supabase.from("call_messages").select("*").eq("call_id", callId).order("timestamp", { ascending: true });
-  const hasUserSpeech = (messages || []).some((message) => message.role === "user");
+  const allMessages = messages || [];
+  const streamStartIndex = allMessages.findIndex(
+    (message) => message.role === "system" && typeof message.content === "string" && message.content.startsWith("Vobiz stream started:")
+  );
+  const analysisMessages = (streamStartIndex >= 0 ? allMessages.slice(streamStartIndex + 1) : allMessages).filter(
+    (message) => message.role === "user" || message.role === "assistant"
+  );
+  const hasUserSpeech = analysisMessages.some((message) => message.role === "user");
   if (!hasUserSpeech) {
     await supabase.from("call_insights").upsert(
       {
@@ -45,7 +52,7 @@ export async function POST(request: NextRequest) {
     return ok({ ok: true, skipped_analysis: true });
   }
 
-  const transcript = (messages || []).map((message) => `${message.role}: ${message.content}`).join("\n");
+  const transcript = analysisMessages.map((message) => `${message.role}: ${message.content}`).join("\n");
   const analysis = await analyzeCallTranscript({ transcript, agentPrompt: call.agents.system_prompt });
 
   await supabase.from("call_insights").upsert(insightFromAnalysis(analysis, callId, call.agent_id), { onConflict: "call_id" });

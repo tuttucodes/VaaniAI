@@ -17,8 +17,8 @@ export default async function MemoryPage() {
     <div className="grid gap-4">
       <Card>
         <CardHeader>
-          <CardTitle>Suggested learnings</CardTitle>
-          <CardDescription>The agent never overwrites prompts or memory without approval.</CardDescription>
+          <CardTitle>Learning queue</CardTitle>
+          <CardDescription>Review facts, objections, and better answers before agents use them with callers.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -33,7 +33,10 @@ export default async function MemoryPage() {
             <TableBody>
               {learningEvents.map((event) => (
                 <TableRow key={event.id}>
-                  <TableCell className="max-w-2xl">{event.suggested_learning}</TableCell>
+                  <TableCell className="max-w-2xl">
+                    <div>{event.suggested_learning}</div>
+                    {event.reason ? <div className="mt-1 text-xs text-muted-foreground">{event.reason}</div> : null}
+                  </TableCell>
                   <TableCell>
                     <StatusPill status={event.status} />
                   </TableCell>
@@ -41,6 +44,13 @@ export default async function MemoryPage() {
                   <TableCell>{event.status === "pending" ? <MemoryActions learningId={event.id} /> : null}</TableCell>
                 </TableRow>
               ))}
+              {!learningEvents.length ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+                    No suggestions yet. After calls, Vaani will propose improvements for review.
+                  </TableCell>
+                </TableRow>
+              ) : null}
             </TableBody>
           </Table>
         </CardContent>
@@ -49,25 +59,26 @@ export default async function MemoryPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Approved memory</CardTitle>
-            <CardDescription>Reusable learnings linked to original source calls.</CardDescription>
+            <CardTitle>Approved answers</CardTitle>
+            <CardDescription>Reusable facts your agents can rely on in future calls.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             {memory.map((item) => (
               <div key={item.id} className="rounded-md border p-3">
                 <div className="mb-2 flex justify-between gap-3 text-xs text-muted-foreground">
-                  <span>{item.category || "memory"}</span>
+                  <span className="capitalize">{item.category || "general"}</span>
                   <span>{Math.round(Number(item.confidence_score || 0) * 100)}%</span>
                 </div>
                 <p className="text-sm">{item.content}</p>
               </div>
             ))}
+            {!memory.length ? <p className="text-sm text-muted-foreground">Approved learnings will appear here.</p> : null}
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Unanswered questions</CardTitle>
-            <CardDescription>Knowledge gaps to close with better files or memory.</CardDescription>
+            <CardTitle>Questions to improve</CardTitle>
+            <CardDescription>Gaps found in calls that can be closed with better answers or uploaded files.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             {unansweredQuestions.map((question) => (
@@ -79,6 +90,7 @@ export default async function MemoryPage() {
                 <p className="mt-2 text-xs text-muted-foreground">{question.reason_failed}</p>
               </div>
             ))}
+            {!unansweredQuestions.length ? <p className="text-sm text-muted-foreground">No unresolved caller questions right now.</p> : null}
           </CardContent>
         </Card>
       </div>

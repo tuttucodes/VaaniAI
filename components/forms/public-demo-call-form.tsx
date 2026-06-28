@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CalendarClock, Headset, Home, PhoneCall, Utensils } from "lucide-react";
+import { CalendarClock, GraduationCap, Headset, Home, PhoneCall, Utensils } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,7 +11,8 @@ import { cn } from "@/lib/utils";
 const icons: Record<DemoScenarioId, typeof CalendarClock> = {
   dental: CalendarClock,
   real_estate: Home,
-  restaurant: Utensils
+  restaurant: Utensils,
+  school: GraduationCap
 };
 
 export function PublicDemoCallForm() {
@@ -49,7 +50,7 @@ export function PublicDemoCallForm() {
         submit(new FormData(event.currentTarget));
       }}
     >
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-4">
         {demoScenarios.map((item) => {
           const Icon = icons[item.id];
           const selected = scenario === item.id;
