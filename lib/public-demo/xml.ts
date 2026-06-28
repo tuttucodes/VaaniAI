@@ -77,8 +77,9 @@ export function streamXml({
   const statusAttributes = statusCallbackUrl
     ? ` statusCallbackUrl="${escapeXml(statusCallbackUrl)}" statusCallbackMethod="POST"`
     : "";
+  const recordingEnabled = process.env.VOBIZ_RECORDING_ENABLED !== "false";
   const recordingXml =
-    process.env.VOBIZ_RECORDING_ENABLED === "true" && recordingCallbackUrl
+    recordingEnabled && recordingCallbackUrl
       ? `\n  <Record recordSession="true" action="${escapeXml(recordingCallbackUrl)}" callbackUrl="${escapeXml(recordingCallbackUrl)}" maxLength="${timeoutSeconds}" />`
       : "";
   const envContentType = process.env.VOBIZ_STREAM_CONTENT_TYPE;
