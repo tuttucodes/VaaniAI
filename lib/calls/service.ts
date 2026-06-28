@@ -1,6 +1,6 @@
 import { analyzeCallTranscript, insightFromAnalysis } from "@/lib/ai/gemini";
 import { demoCalls } from "@/lib/demo-data";
-import { isDemoMode } from "@/lib/env";
+import { getEnv, isDemoMode } from "@/lib/env";
 import { ensureLiveKitRoom, liveKitRoomName } from "@/lib/livekit/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { vobizProvider } from "@/lib/telephony/vobiz";
@@ -77,15 +77,43 @@ export async function startCall(userId: string, input: StartCallInput) {
     }
   });
 
-  const telephony = await vobizProvider.createOutboundCall({
-    to: input.phone_number,
-    from: process.env.DEFAULT_FROM_NUMBER,
-    agentId: input.agent_id,
-    callId: insertedCall.id,
-    livekitRoomName: roomName,
-    sipConfig: (agent.vobiz_config || {}) as Record<string, unknown>,
-    metadata: input.metadata
-  });
+  const appUrl = getEnv("NEXT_PUBLIC_APP_URL")?.replace(/\/$/, "");
+  const openingText = agent.first_message || "Hi, how can I help you today?";
+  const { data: openingMessage, error: openingError } = await supabase
+    .from("call_messages")
+    .insert({
+      call_id: insertedCall.id,
+      agent_id: input.agent_id,
+      role: "assistant",
+      content: openingText,
+      latency_ms: 0
+    })
+    .select("id")
+    .single();
+  if (openingError) throw openingError;
+
+  const telephony =
+    appUrl && getEnv("VOBIZ_STREAM_WS_URL")?.startsWith("wss://")
+      ? await vobizProvider.createXmlOutboundCall({
+          to: input.phone_number,
+          from: process.env.DEFAULT_FROM_NUMBER,
+          answerUrl: `${appUrl}/api/vobiz/agent-answer?call_id=${encodeURIComponent(insertedCall.id)}&opening_message_id=${encodeURIComponent(openingMessage.id)}`,
+          ringUrl: `${appUrl}/api/vobiz/demo-ring?call_id=${encodeURIComponent(insertedCall.id)}`,
+          hangupUrl: `${appUrl}/api/vobiz/demo-hangup?call_id=${encodeURIComponent(insertedCall.id)}`,
+          fallbackUrl: `${appUrl}/api/vobiz/agent-answer?call_id=${encodeURIComponent(insertedCall.id)}&opening_message_id=${encodeURIComponent(openingMessage.id)}`,
+          callerName: agent.name || "Vaani AI",
+          timeLimitSeconds: Number((agent.model_config as Record<string, unknown> | null)?.maxCallDurationSeconds || 240),
+          metadata: { ...input.metadata, agent_id: input.agent_id, call_id: insertedCall.id, room_name: roomName }
+        })
+      : await vobizProvider.createOutboundCall({
+          to: input.phone_number,
+          from: process.env.DEFAULT_FROM_NUMBER,
+          agentId: input.agent_id,
+          callId: insertedCall.id,
+          livekitRoomName: roomName,
+          sipConfig: (agent.vobiz_config || {}) as Record<string, unknown>,
+          metadata: input.metadata
+        });
   const telephonyReady = telephony.status !== "requires_configuration" && telephony.status !== "failed";
 
   const { data: call, error: updateError } = await supabase

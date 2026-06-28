@@ -1,0 +1,35 @@
+import type { NextRequest } from "next/server";
+import { speakHangupXml, streamXml } from "@/lib/public-demo/xml";
+import { publicBaseUrl } from "@/lib/public-demo/url";
+import { createSupabaseAdminClient } from "@/lib/supabase/server";
+
+export async function POST(request: NextRequest) {
+  const url = new URL(request.url);
+  const callId = url.searchParams.get("call_id") || "";
+  const openingMessageId = url.searchParams.get("opening_message_id") || "";
+  const baseUrl = publicBaseUrl(request);
+  const streamBaseUrl = process.env.VOBIZ_STREAM_WS_URL || "";
+  const supabase = createSupabaseAdminClient();
+
+  if (supabase && callId) {
+    await supabase.from("calls").update({ status: "in_progress" }).eq("id", callId);
+  }
+
+  if (!streamBaseUrl.startsWith("wss://")) {
+    return speakHangupXml("The voice worker is not available right now. Please try again shortly.");
+  }
+
+  const streamUrl = new URL(streamBaseUrl);
+  streamUrl.searchParams.set("call_id", callId);
+  streamUrl.searchParams.set("scenario", "dental");
+  streamUrl.searchParams.set("name", "there");
+  streamUrl.searchParams.set("use_case", "dashboard outbound call");
+  streamUrl.searchParams.set("opening_message_id", openingMessageId);
+
+  return streamXml({
+    streamUrl: streamUrl.toString(),
+    statusCallbackUrl: `${baseUrl}/api/vobiz/demo-stream-status?call_id=${encodeURIComponent(callId)}`
+  });
+}
+
+export const GET = POST;

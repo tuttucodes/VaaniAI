@@ -38,6 +38,8 @@ type CallState = {
   agentId: string;
   streamId: string;
   scenario: ReturnType<typeof getDemoScenario>;
+  agentName: string;
+  agentSystemPrompt: string;
   name: string;
   useCase: string;
   sampleRate: number;
@@ -140,11 +142,21 @@ function sendPcm(ws: WebSocket, pcm: Buffer, sampleRate = phoneSampleRate) {
   }
 }
 
-async function getCallAgentId(callId: string) {
+async function getCallRuntime(callId: string) {
   const supabase = createSupabaseAdminClient();
-  if (!supabase || !callId) return "";
-  const { data } = await supabase.from("calls").select("agent_id").eq("id", callId).single();
-  return data?.agent_id || "";
+  if (!supabase || !callId) return null;
+  const { data } = await supabase
+    .from("calls")
+    .select("agent_id, agents(name, system_prompt, first_message)")
+    .eq("id", callId)
+    .single();
+  const agent = Array.isArray(data?.agents) ? data?.agents[0] : data?.agents;
+  return {
+    agentId: data?.agent_id || "",
+    agentName: typeof agent?.name === "string" ? agent.name : "",
+    systemPrompt: typeof agent?.system_prompt === "string" ? agent.system_prompt : "",
+    firstMessage: typeof agent?.first_message === "string" ? agent.first_message : ""
+  };
 }
 
 async function recordMessage(callId: string, agentId: string, role: "system" | "user" | "assistant", content: string, latencyMs = 0) {
@@ -186,9 +198,10 @@ function buildReplyPrompt(state: CallState, transcript: string) {
     .map((turn) => `${turn.role === "user" ? "Caller" : "Assistant"}: ${turn.content}`)
     .join("\n");
 
-  return `${state.scenario.systemPrompt}
+  return `${state.agentSystemPrompt || state.scenario.systemPrompt}
 
 You are on a live phone call in India.
+Agent name: ${state.agentName || state.scenario.agentName}
 Caller name: ${state.name}
 Landing-page use case: ${state.useCase || "not provided"}
 
@@ -352,13 +365,16 @@ wss.on("connection", (ws, request) => {
 
     if (isStartEvent(message)) {
       const streamId = message.start.streamId;
-      const agentId = await getCallAgentId(callId);
+      const runtime = await getCallRuntime(callId);
+      const agentId = runtime?.agentId || "";
       const sampleRate = message.start.mediaFormat?.sampleRate || phoneSampleRate;
       state = {
         callId,
         agentId,
         streamId,
         scenario,
+        agentName: runtime?.agentName || scenario.agentName,
+        agentSystemPrompt: runtime?.systemPrompt || scenario.systemPrompt,
         name,
         useCase,
         sampleRate,
@@ -377,7 +393,7 @@ wss.on("connection", (ws, request) => {
       };
 
       await recordMessage(callId, agentId, "system", `Vobiz stream started: ${streamId} at ${sampleRate} Hz. Gemini orchestration active.`);
-      const opening = await getOpening(callId, openingMessageId, `Hi ${name}, how can I help?`);
+      const opening = await getOpening(callId, openingMessageId, runtime?.firstMessage || `Hi ${name}, how can I help?`);
       await playText(ws, state, opening);
       return;
     }
