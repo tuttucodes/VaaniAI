@@ -49,14 +49,18 @@ type CallState = {
   assistantAudioQueued: boolean;
   history: HistoryTurn[];
   turnStartedAt: number;
+  mediaFrames: number;
+  maxRms: number;
+  speechLikeFrames: number;
+  processedTurns: number;
 };
 
 const port = Number(process.env.PORT || process.env.VOBIZ_STREAM_PORT || 8080);
 const phoneSampleRate = 8000;
-const speechRmsThreshold = 0.012;
-const bargeInRmsThreshold = 0.018;
-const minSpeechFrames = 8; // 160 ms.
-const endSilenceFrames = 28; // 560 ms.
+const speechRmsThreshold = 0.006;
+const bargeInRmsThreshold = 0.016;
+const minSpeechFrames = 4; // 80 ms.
+const endSilenceFrames = 18; // 360 ms.
 const maxUtteranceFrames = 900; // 18 seconds.
 
 function isStartEvent(message: unknown): message is VobizStartEvent {
@@ -217,6 +221,7 @@ async function playText(ws: WebSocket, state: CallState, text: string) {
 async function processTurn(ws: WebSocket, state: CallState, pcm: Buffer) {
   if (state.processing || pcm.length < 640) return;
   state.processing = true;
+  state.processedTurns += 1;
   const started = Date.now();
 
   try {
@@ -229,6 +234,12 @@ async function processTurn(ws: WebSocket, state: CallState, pcm: Buffer) {
     );
 
     if (!transcript || transcript.toLowerCase() === "empty string") {
+      await recordMessage(
+        state.callId,
+        state.agentId,
+        "system",
+        `Gemini STT returned no transcript for ${Math.round(pcm.length / 2 / phoneSampleRate * 1000)} ms of captured audio.`
+      );
       state.processing = false;
       return;
     }
@@ -275,6 +286,8 @@ async function processTurn(ws: WebSocket, state: CallState, pcm: Buffer) {
 async function handleAudioFrame(ws: WebSocket, state: CallState, inboundLe: Buffer) {
   const frame = state.sampleRate === phoneSampleRate ? inboundLe : resamplePcm16Mono(inboundLe, state.sampleRate, phoneSampleRate);
   const rms = rmsPcm16Le(frame);
+  state.mediaFrames += 1;
+  state.maxRms = Math.max(state.maxRms, rms);
 
   if (state.assistantAudioQueued && rms > bargeInRmsThreshold) {
     state.assistantAudioQueued = false;
@@ -282,6 +295,7 @@ async function handleAudioFrame(ws: WebSocket, state: CallState, inboundLe: Buff
   }
 
   if (rms > speechRmsThreshold) {
+    state.speechLikeFrames += 1;
     if (!state.inSpeech) {
       state.inSpeech = true;
       state.turnStartedAt = Date.now();
@@ -355,7 +369,11 @@ wss.on("connection", (ws, request) => {
         processing: false,
         assistantAudioQueued: false,
         history: [],
-        turnStartedAt: Date.now()
+        turnStartedAt: Date.now(),
+        mediaFrames: 0,
+        maxRms: 0,
+        speechLikeFrames: 0,
+        processedTurns: 0
       };
 
       await recordMessage(callId, agentId, "system", `Vobiz stream started: ${streamId} at ${sampleRate} Hz. Gemini orchestration active.`);
@@ -380,7 +398,12 @@ wss.on("connection", (ws, request) => {
     if (state.inSpeech && state.speechFrames >= minSpeechFrames) {
       void processTurn(ws, state, Buffer.concat(state.turnBuffers));
     }
-    void recordMessage(state.callId, state.agentId, "system", "Vobiz stream closed.");
+    void recordMessage(
+      state.callId,
+      state.agentId,
+      "system",
+      `Vobiz stream closed. Frames=${state.mediaFrames}, speech_like=${state.speechLikeFrames}, max_rms=${state.maxRms.toFixed(4)}, processed_turns=${state.processedTurns}.`
+    );
   });
 });
 

@@ -64,7 +64,7 @@ export function speakHangupXml(message: string, language = "en-IN") {
 export function streamXml({
   streamUrl,
   statusCallbackUrl,
-  contentType = "audio/x-l16;rate=16000",
+  contentType = "audio/x-l16;rate=8000",
   timeoutSeconds = 600
 }: {
   streamUrl: string;
