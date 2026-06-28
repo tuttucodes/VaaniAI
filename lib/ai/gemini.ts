@@ -14,6 +14,7 @@ export interface GeminiGenerationOptions {
 
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const DEFAULT_CHAT_MODEL = "gemini-2.5-flash-lite";
+const DEFAULT_STT_MODEL = "gemini-2.5-flash";
 const DEFAULT_EMBEDDING_MODEL = "gemini-embedding-2";
 const DEFAULT_TTS_MODEL = "gemini-2.5-flash-preview-tts";
 const DEFAULT_TTS_VOICE = "Achird";
@@ -31,6 +32,10 @@ function uniqueModels(models: string[]) {
 
 export function getEmbeddingModel() {
   return getEnv("GEMINI_EMBEDDING_MODEL") || DEFAULT_EMBEDDING_MODEL;
+}
+
+export function getSttModel() {
+  return getEnv("GEMINI_STT_MODEL") || DEFAULT_STT_MODEL;
 }
 
 export function getTtsModel() {
@@ -200,6 +205,63 @@ function pcmToWav(pcm: Buffer, sampleRate = PHONE_TTS_SAMPLE_RATE) {
   header.write("data", 36);
   header.writeUInt32LE(dataSize, 40);
   return Buffer.concat([header, pcm]);
+}
+
+export async function transcribeGeminiPcm({
+  pcm,
+  sampleRate = PHONE_TTS_SAMPLE_RATE,
+  languageHint = "English, Hindi, Malayalam, or mixed Indian speech"
+}: {
+  pcm: Buffer;
+  sampleRate?: number;
+  languageHint?: string;
+}) {
+  if (!isGeminiConfigured()) throw new Error("GEMINI_API_KEY is required for Gemini STT.");
+  if (!pcm.length) return "";
+
+  const wav = pcmToWav(pcm, sampleRate);
+  const response = await fetch(`${GEMINI_API_BASE}/models/${getSttModel()}:generateContent?key=${requireEnv("GEMINI_API_KEY")}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `Transcribe this phone-call audio. Language may be ${languageHint}. Return only the spoken words. If there is no clear speech, return an empty string.`
+            },
+            {
+              inlineData: {
+                mimeType: "audio/wav",
+                data: wav.toString("base64")
+              }
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        temperature: 0,
+        maxOutputTokens: 320
+      }
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Gemini STT failed: ${response.status} ${await response.text()}`);
+  }
+
+  const data = (await response.json()) as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  };
+  const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim() || "";
+  return text
+    .replace(/^```[\s\S]*?\n?/, "")
+    .replace(/```$/g, "")
+    .replace(/^["'“”]+|["'“”]+$/g, "")
+    .trim();
 }
 
 export async function generateGeminiTtsWav({

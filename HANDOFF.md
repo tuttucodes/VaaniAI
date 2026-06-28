@@ -289,3 +289,17 @@ Latest production test after commit `17193d0`:
 - Public demo Stream XML now negotiates `audio/x-l16;rate=16000` by default.
 - Added Cloud Build file `cloudbuild.vobiz-stream.yaml` and `Dockerfile.vobiz-stream`.
 - Added `/api/agents/improve` plus dashboard "Improve with AI" button for agent creation/editing. It uses Gemini server-side to improve description, prompt, first message, and end-call rules without exposing keys.
+
+## 2026-06-28 Gemini Live Fallback Decision
+
+- Live API smoke tests showed the current Gemini API key/project exposes text, audio-understanding, embedding, and TTS models, but no `bidiGenerateContent`/Live models in `v1beta` or `v1alpha`.
+- The worker was changed from Gemini Live to a custom orchestration layer:
+  - Vobiz WebSocket receives 20 ms L16 frames.
+  - Worker converts Vobiz inbound big-endian L16 to little-endian PCM.
+  - Worker does simple RMS VAD/endpointing.
+  - Each caller utterance is transcribed by Gemini audio-understanding (`GEMINI_STT_MODEL` or `gemini-2.5-flash`).
+  - Gemini text model creates the short receptionist reply.
+  - Gemini TTS creates 8 kHz PCM and streams it back to Vobiz via `playAudio`.
+  - Transcript and latency system notes are stored in Supabase.
+- This is not as low-latency as Gemini Live, but it uses only models currently available to the active Gemini key and should make the demo actually converse.
+- Dograh reference repo was shallow-cloned outside the app repo at `/tmp/vaani-reference-repos/dograh` for architecture reference.
