@@ -421,7 +421,8 @@ Latest production test after commit `17193d0`:
   - All new/edited agents now save `language: multilingual-IN`; there is no single-language lock in the agent form.
   - Dashboard agent list displays `Multilingual` instead of raw language codes.
   - Public demo scenarios and agent-improvement prompts now explicitly support Malayalam, Tamil, Telugu, Kannada, Hindi, English, and mixed speech.
-  - Vobiz XML recording is enabled by default when a recording callback URL is available; set `VOBIZ_RECORDING_ENABLED=false` to disable it.
+  - Follow-up finding: putting `<Record recordSession="true">` before bidirectional `<Stream>` caused Vobiz to end the call with `Invalid Action XML`.
+  - Stream XML now emits only `<Stream>` for the AI path. Keep recording lookup/callback code, but do not place `<Record>` in the same top-level stream response until Vobiz confirms the exact compatible syntax.
 - Verification:
   - `npm run typecheck -- --pretty false` passed.
   - `npm run build` passed.

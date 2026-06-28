@@ -77,11 +77,7 @@ export function streamXml({
   const statusAttributes = statusCallbackUrl
     ? ` statusCallbackUrl="${escapeXml(statusCallbackUrl)}" statusCallbackMethod="POST"`
     : "";
-  const recordingEnabled = process.env.VOBIZ_RECORDING_ENABLED !== "false";
-  const recordingXml =
-    recordingEnabled && recordingCallbackUrl
-      ? `\n  <Record recordSession="true" action="${escapeXml(recordingCallbackUrl)}" callbackUrl="${escapeXml(recordingCallbackUrl)}" maxLength="${timeoutSeconds}" />`
-      : "";
+  void recordingCallbackUrl;
   const envContentType = process.env.VOBIZ_STREAM_CONTENT_TYPE;
   const resolvedContentType =
     contentType ||
@@ -93,7 +89,7 @@ export function streamXml({
       : "audio/x-mulaw;rate=8000");
 
   return xmlResponse(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>${recordingXml}
+<Response>
   <Stream bidirectional="true" audioTrack="inbound" keepCallAlive="true" contentType="${escapeXml(resolvedContentType)}" streamTimeout="${timeoutSeconds}" maxRetries="2"${statusAttributes}>${escapeXml(streamUrl)}</Stream>
 </Response>`);
 }
