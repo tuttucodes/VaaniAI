@@ -10,6 +10,7 @@ export interface GeminiGenerationOptions {
   model?: string;
   temperature?: number;
   maxOutputTokens?: number;
+  responseMimeType?: "application/json" | "text/plain";
 }
 
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
@@ -141,7 +142,8 @@ export async function generateGeminiText(messages: GeminiChatMessage[], options:
         contents: toGeminiContents(messages),
         generationConfig: {
           temperature: options.temperature ?? 0.35,
-          maxOutputTokens: options.maxOutputTokens ?? 512
+          maxOutputTokens: options.maxOutputTokens ?? 512,
+          ...(options.responseMimeType ? { responseMimeType: options.responseMimeType } : {})
         }
       })
     });
