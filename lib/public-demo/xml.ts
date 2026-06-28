@@ -64,20 +64,35 @@ export function speakHangupXml(message: string, language = "en-IN") {
 export function streamXml({
   streamUrl,
   statusCallbackUrl,
-  contentType = "audio/x-l16;rate=8000",
+  recordingCallbackUrl,
+  contentType,
   timeoutSeconds = 600
 }: {
   streamUrl: string;
   statusCallbackUrl?: string;
+  recordingCallbackUrl?: string;
   contentType?: "audio/x-l16;rate=8000" | "audio/x-l16;rate=16000" | "audio/x-l16;rate=24000" | "audio/x-mulaw;rate=8000";
   timeoutSeconds?: number;
 }) {
   const statusAttributes = statusCallbackUrl
     ? ` statusCallbackUrl="${escapeXml(statusCallbackUrl)}" statusCallbackMethod="POST"`
     : "";
+  const recordingXml =
+    process.env.VOBIZ_RECORDING_ENABLED === "true" && recordingCallbackUrl
+      ? `\n  <Record recordSession="true" action="${escapeXml(recordingCallbackUrl)}" callbackUrl="${escapeXml(recordingCallbackUrl)}" maxLength="${timeoutSeconds}" />`
+      : "";
+  const envContentType = process.env.VOBIZ_STREAM_CONTENT_TYPE;
+  const resolvedContentType =
+    contentType ||
+    (envContentType === "audio/x-l16;rate=8000" ||
+    envContentType === "audio/x-l16;rate=16000" ||
+    envContentType === "audio/x-l16;rate=24000" ||
+    envContentType === "audio/x-mulaw;rate=8000"
+      ? envContentType
+      : "audio/x-mulaw;rate=8000");
 
   return xmlResponse(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Stream bidirectional="true" keepCallAlive="true" contentType="${escapeXml(contentType)}" streamTimeout="${timeoutSeconds}" maxRetries="2"${statusAttributes}>${escapeXml(streamUrl)}</Stream>
+<Response>${recordingXml}
+  <Stream bidirectional="true" audioTrack="inbound" keepCallAlive="true" contentType="${escapeXml(resolvedContentType)}" streamTimeout="${timeoutSeconds}" maxRetries="2"${statusAttributes}>${escapeXml(streamUrl)}</Stream>
 </Response>`);
 }

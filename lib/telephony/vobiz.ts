@@ -34,6 +34,16 @@ function vobizCallUrl() {
   return new URL(`Account/${authId}/Call/`, base.endsWith("/") ? base : `${base}/`).toString();
 }
 
+function vobizRecordingUrl(providerCallId: string) {
+  const base = getEnv("VOBIZ_BASE_URL") || "https://api.vobiz.ai/api/v1";
+  const { authId } = vobizAuth();
+  if (!authId || !providerCallId) return null;
+  const url = new URL(`Account/${authId}/Recording/`, base.endsWith("/") ? base : `${base}/`);
+  url.searchParams.set("call_uuid", providerCallId);
+  url.searchParams.set("limit", "1");
+  return url.toString();
+}
+
 function toVobizDialString(number?: string) {
   return (number || "").replace(/[^\d+]/g, "").replace(/^\+/, "");
 }
@@ -45,6 +55,54 @@ function verifySignature(body: string, signature: string | null) {
 
   const expected = crypto.createHmac("sha256", secret).update(body).digest("hex");
   return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+}
+
+function parseVobizBody(body: string, contentType = "") {
+  if (contentType.includes("application/json")) {
+    return JSON.parse(body || "{}") as Record<string, unknown>;
+  }
+
+  const params = new URLSearchParams(body);
+  const parsed: Record<string, unknown> = {};
+  for (const [key, value] of params.entries()) parsed[key] = value;
+  if (Object.keys(parsed).length) return parsed;
+  return JSON.parse(body || "{}") as Record<string, unknown>;
+}
+
+function stringField(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value) return value;
+  }
+  return "";
+}
+
+function extractRecordingUrl(record: unknown) {
+  if (!record || typeof record !== "object") return "";
+  return stringField(record as Record<string, unknown>, ["recording_url", "record_url", "RecordUrl", "RecordingUrl", "url"]);
+}
+
+export async function fetchVobizRecordingUrl(providerCallId: string) {
+  const url = vobizRecordingUrl(providerCallId);
+  const { authId, authToken } = vobizAuth();
+  if (!url || !authId || !authToken) return "";
+
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "x-auth-id": authId,
+        "x-auth-token": authToken
+      },
+      signal: AbortSignal.timeout(10_000)
+    });
+    if (!response.ok) return "";
+    const raw = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    const objects = Array.isArray(raw.objects) ? raw.objects : Array.isArray(raw.data) ? raw.data : [];
+    return extractRecordingUrl(objects[0]) || extractRecordingUrl(raw);
+  } catch {
+    return "";
+  }
 }
 
 export class VobizTelephonyProvider implements TelephonyProvider {
@@ -114,7 +172,7 @@ export class VobizTelephonyProvider implements TelephonyProvider {
     return {
       provider: "vobiz",
       status: "queued",
-      providerCallId: String(record.request_uuid || record.call_uuid || record.call_id || record.api_id || ""),
+      providerCallId: String(record.call_uuid || record.CallUUID || record.call_id || record.uuid || record.request_uuid || record.api_id || ""),
       raw
     };
   }
@@ -200,12 +258,12 @@ export class VobizTelephonyProvider implements TelephonyProvider {
       throw new Error("Invalid Vobiz webhook signature");
     }
 
-    const raw = JSON.parse(body || "{}") as Record<string, unknown>;
+    const raw = parseVobizBody(body, request.headers.get("content-type") || "");
     const metadata = typeof raw.metadata === "object" && raw.metadata ? (raw.metadata as Record<string, unknown>) : {};
 
     return {
-      providerCallId: String(raw.call_id || raw.id || raw.uuid || ""),
-      callId: typeof raw.customer_reference === "string" ? raw.customer_reference : undefined,
+      providerCallId: stringField(raw, ["call_uuid", "CallUUID", "call_id", "CallID", "id", "uuid"]),
+      callId: stringField(raw, ["customer_reference", "call_reference", "app_call_id"]) || undefined,
       agentId:
         typeof raw.agent_id === "string"
           ? raw.agent_id
@@ -214,8 +272,8 @@ export class VobizTelephonyProvider implements TelephonyProvider {
             : undefined,
       status: typeof raw.status === "string" ? raw.status : typeof raw.event === "string" ? raw.event : undefined,
       direction: raw.direction === "inbound" ? "inbound" : raw.direction === "outbound" ? "outbound" : undefined,
-      recordingUrl: typeof raw.recording_url === "string" ? raw.recording_url : undefined,
-      phoneNumber: typeof raw.phone_number === "string" ? raw.phone_number : typeof raw.from === "string" ? raw.from : undefined,
+      recordingUrl: extractRecordingUrl(raw) || undefined,
+      phoneNumber: stringField(raw, ["phone_number", "from", "From", "Caller"]) || undefined,
       livekitRoomName: typeof raw.livekit_room_name === "string" ? raw.livekit_room_name : undefined,
       raw
     };

@@ -81,7 +81,7 @@ Current Vaani implementation:
 - If future smoke tests return HTTP 429 or `prepayment credits are depleted`, fix AI Studio billing/prepay for the project behind that key before debugging app code.
 - Gemini runtime defaults are now in code:
   - text replies default to `gemini-2.5-flash-lite`
-  - TTS defaults to `gemini-2.5-flash-preview-tts`
+  - TTS defaults to `gemini-3.1-flash-tts-preview`
   - voice defaults to `Achird`
   - TTS auto-enables when `GEMINI_API_KEY` is configured unless `GEMINI_TTS_ENABLED=false`
 - LiveKit: Cloud project credentials work for token creation. For real phone-call audio with sub-second latency, keep LiveKit Cloud and deploy the voice worker as an always-on service on DigitalOcean/Fly/Render. Netlify functions are not suitable for a persistent LiveKit media worker.
@@ -377,3 +377,31 @@ Latest production test after commit `17193d0`:
   - XML/Application request logs for answer URL and stream status callbacks
   - Any stream start/media format fields Vobiz exposes (`encoding`, `sampleRate`, `contentType`)
   - Whether Vobiz force-transcodes streams to PCMU despite requested `audio/x-l16;rate=8000`
+
+## 2026-06-28 T7/Retail Daddy Vobiz Reset
+
+- User pointed to `/Volumes/T7/retaildaddy` and said only some prior paths worked; do not copy blindly.
+- Read Vobiz local skills and prior Retail Daddy/CallVaani code:
+  - Proven parent prototype worker is `/Volumes/T7/retaildaddy`, not the newer `callvaani/apps/call-engine` variants.
+  - Proven Vobiz XML helper is `/Volumes/T7/retaildaddy/src/vobizTelephony.js`.
+  - It explicitly used `<Stream bidirectional="true" keepCallAlive="true" contentType="audio/x-mulaw;rate=8000">`.
+  - Prior architecture docs describe Vobiz as 8 kHz mu-law/PCMU audio, with recording as a separate callback/lookup path.
+- Current repo changes made after that audit:
+  - `lib/public-demo/xml.ts` now defaults Vobiz Stream XML to `audio/x-mulaw;rate=8000` and adds `audioTrack="inbound"`.
+  - `VOBIZ_STREAM_CONTENT_TYPE` can override the stream format only to one of Vobiz's documented values.
+  - `VOBIZ_RECORDING_ENABLED=true` adds `<Record recordSession="true" ...>` before `<Stream>` with callback `/api/vobiz/recording-callback`.
+  - `/api/vobiz/recording-callback` stores `calls.recording_url` when Vobiz sends `RecordUrl`, `RecordingUrl`, `recording_url`, `record_url`, or `url`.
+  - `lib/telephony/vobiz.ts` now prefers `call_uuid` over `request_uuid` for `vobiz_call_id`, parses form-encoded webhooks, extracts recording URL aliases, and exposes `fetchVobizRecordingUrl`.
+  - `/api/vobiz/demo-hangup` now does a best-effort Vobiz Recording API lookup by `call_uuid` before finalizing a call.
+  - `workers/vobiz-stream-agent.ts` now makes PCMU auto-detection sticky: if media frames reveal mu-law despite a non-mulaw start header, future playback switches to `audio/x-mulaw` and logs a system diagnostic.
+- Checks run:
+  - Local Gemini TTS model smoke test with the current key:
+    - `gemini-3.1-flash-tts-preview`: `status=200`, audio returned.
+    - `gemini-2.5-flash-preview-tts`: `status=429 RESOURCE_EXHAUSTED`.
+  - `lib/ai/gemini.ts` now defaults TTS to `gemini-3.1-flash-tts-preview` and does not use non-Gemini fallback providers.
+  - `npm run typecheck -- --pretty false` passed.
+  - `npm run build` passed.
+  - `git diff --check` passed.
+  - XML CLI smoke test confirmed `contentType="audio/x-mulaw;rate=8000"`, `audioTrack="inbound"`, recording XML when enabled, and URL escaping.
+  - Secret scan across tracked files found no live keys.
+- Important: not pushed/deployed yet after this reset. User asked not to burn Netlify credits with frequent pushes. Batch is local until final deploy decision.

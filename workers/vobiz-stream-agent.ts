@@ -56,6 +56,7 @@ type CallState = {
   maxRms: number;
   speechLikeFrames: number;
   processedTurns: number;
+  detectedMediaEncoding: boolean;
 };
 
 const port = Number(process.env.PORT || process.env.VOBIZ_STREAM_PORT || 8080);
@@ -280,6 +281,16 @@ async function playText(ws: WebSocket, state: CallState, text: string) {
   return Date.now() - started;
 }
 
+async function tryPlayText(ws: WebSocket, state: CallState, text: string, label: string) {
+  try {
+    return await playText(ws, state, text);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown error";
+    await recordMessage(state.callId, state.agentId, "system", `${label} TTS failed: ${message.slice(0, 500)}`);
+    return null;
+  }
+}
+
 async function processTurn(ws: WebSocket, state: CallState, pcm: Buffer) {
   if (state.processing || pcm.length < 640) return;
   state.processing = true;
@@ -440,7 +451,8 @@ wss.on("connection", (ws, request) => {
         mediaFrames: 0,
         maxRms: 0,
         speechLikeFrames: 0,
-        processedTurns: 0
+        processedTurns: 0,
+        detectedMediaEncoding: false
       };
 
       await recordMessage(
@@ -450,7 +462,7 @@ wss.on("connection", (ws, request) => {
         `Vobiz stream started: ${streamId} at ${sampleRate} Hz (${mediaEncoding}). Gemini orchestration active.`
       );
       const opening = await getOpening(callId, openingMessageId, runtime?.firstMessage || `Hi ${name}, how can I help?`);
-      await playText(ws, state, opening);
+      await tryPlayText(ws, state, opening, "Opening");
       return;
     }
 
@@ -463,6 +475,18 @@ wss.on("connection", (ws, request) => {
       const inbound = Buffer.from(message.media.payload, "base64");
       const encoding = state.mediaEncoding.toLowerCase();
       const looksMulaw = encoding.includes("mulaw") || encoding.includes("pcmu") || inbound.length === Math.floor(state.sampleRate * 0.02);
+      if (looksMulaw && !encoding.includes("mulaw") && !encoding.includes("pcmu")) {
+        state.mediaEncoding = "audio/x-mulaw";
+        if (!state.detectedMediaEncoding) {
+          state.detectedMediaEncoding = true;
+          void recordMessage(
+            state.callId,
+            state.agentId,
+            "system",
+            `Auto-detected Vobiz PCMU media frames (${inbound.length} bytes at ${state.sampleRate} Hz); switched playback to audio/x-mulaw.`
+          );
+        }
+      }
       const inboundLe = looksMulaw ? mulawToPcm16Le(inbound) : swap16(inbound);
       await handleAudioFrame(ws, state, inboundLe);
     }

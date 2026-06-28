@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { ok } from "@/lib/api";
 import { analyzeCallTranscript, insightFromAnalysis } from "@/lib/ai/gemini";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import { fetchVobizRecordingUrl } from "@/lib/telephony/vobiz";
 
 export async function POST(request: NextRequest) {
   const callId = new URL(request.url).searchParams.get("call_id");
@@ -10,6 +11,7 @@ export async function POST(request: NextRequest) {
 
   const { data: call } = await supabase.from("calls").select("*, agents(*)").eq("id", callId).single();
   if (!call?.agents) return ok({ ok: true });
+  const recordingUrl = call.vobiz_call_id ? await fetchVobizRecordingUrl(call.vobiz_call_id).catch(() => "") : "";
 
   const { data: messages } = await supabase.from("call_messages").select("*").eq("call_id", callId).order("timestamp", { ascending: true });
   const hasUserSpeech = (messages || []).some((message) => message.role === "user");
@@ -36,6 +38,7 @@ export async function POST(request: NextRequest) {
       .update({
         status: "completed",
         ended_at: new Date().toISOString(),
+        ...(recordingUrl ? { recording_url: recordingUrl } : {}),
         summary: "Call ended without captured caller speech. No AI analysis was run."
       })
       .eq("id", callId);
@@ -51,6 +54,7 @@ export async function POST(request: NextRequest) {
     .update({
       status: "completed",
       ended_at: new Date().toISOString(),
+      ...(recordingUrl ? { recording_url: recordingUrl } : {}),
       summary: analysis.summary || call.summary
     })
     .eq("id", callId);

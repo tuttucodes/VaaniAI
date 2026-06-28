@@ -43,7 +43,8 @@ export async function POST(request: NextRequest) {
 
     return streamXml({
       streamUrl: streamUrl.toString(),
-      statusCallbackUrl: `${baseUrl}/api/vobiz/demo-stream-status?call_id=${encodeURIComponent(callId)}`
+      statusCallbackUrl: `${baseUrl}/api/vobiz/demo-stream-status?call_id=${encodeURIComponent(callId)}`,
+      recordingCallbackUrl: `${baseUrl}/api/vobiz/recording-callback?call_id=${encodeURIComponent(callId)}`
     });
   }
 

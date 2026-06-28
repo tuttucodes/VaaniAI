@@ -17,7 +17,7 @@ const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const DEFAULT_CHAT_MODEL = "gemini-2.5-flash-lite";
 const DEFAULT_STT_MODEL = "gemini-2.5-flash";
 const DEFAULT_EMBEDDING_MODEL = "gemini-embedding-2";
-const DEFAULT_TTS_MODEL = "gemini-2.5-flash-preview-tts";
+const DEFAULT_TTS_MODEL = "gemini-3.1-flash-tts-preview";
 const DEFAULT_TTS_VOICE = "Achird";
 const EMBEDDING_DIMENSION = 768;
 const GEMINI_TTS_SAMPLE_RATE = 24000;
@@ -320,14 +320,14 @@ export async function generateGeminiTtsPcm8khz({
   });
 
   if (!response.ok) {
-    throw new Error(`Gemini TTS failed: ${response.status} ${await response.text()}`);
+    throw new Error(`Gemini TTS failed: ${model}: ${response.status} ${await response.text()}`);
   }
 
   const data = (await response.json()) as {
     candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { data?: string } }> } }>;
   };
   const encoded = data.candidates?.[0]?.content?.parts?.find((part) => part.inlineData?.data)?.inlineData?.data;
-  if (!encoded) throw new Error("Gemini TTS response did not include audio.");
+  if (!encoded) throw new Error(`Gemini TTS response did not include audio for ${model}.`);
 
   return downsamplePcm16Mono(Buffer.from(encoded, "base64"));
 }
