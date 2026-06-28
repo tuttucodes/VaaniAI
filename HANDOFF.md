@@ -347,3 +347,33 @@ Latest production test after commit `17193d0`:
   - Vobiz call id: `adb4e0d9-e02c-4325-ab9a-5feee283b097`
   - CDR: `answer_time=null`, `billsec=0`, `ring_time=53`, `hangup_cause=NO_USER_RESPONSE`, `hangup_source=Carrier`, `total_cost=0`.
   - Interpretation: dashboard call creation and Vobiz dial-out worked, but this test call was not answered, so no Vobiz stream opened and no caller transcript could be captured.
+
+## 2026-06-28 Answered Call Audio Diagnosis
+
+- User requested `call now`; production public dental demo call was placed.
+- App call id: `c1ef68af-c712-4be2-8b3d-fd6453a8a77b`
+- Vobiz call id: `004e9ed3-9cb5-411e-85d7-9a9e1cdff78e`
+- This call was answered:
+  - `answer_time=2026-06-28T05:07:50Z`
+  - `billsec=32`
+  - `hangup_cause=NORMAL_CLEARING`
+  - `hangup_source=Callee`
+  - `codec=PCMU`
+  - `mos=4.5`
+  - `streaming_cost=0.2`, `total_cost=0.65`
+- Supabase messages showed:
+  - stream opened at 8000 Hz
+  - strong inbound audio activity (`Frames=1527`, `speech_like=1526`, `max_rms=0.6928`, `processed_turns=2`)
+  - Gemini STT returned no transcript twice
+- Local STT smoke test with Gemini TTS-generated 8 kHz audio succeeded, so Gemini STT itself is working.
+- Diagnosis: Vobiz/carrier leg used PCMU, but the worker treated inbound stream media as L16 PCM. That likely sent decoded noise to Gemini STT.
+- Patch pushed as `4a37316`:
+  - Worker now supports µ-law/PCMU inbound decode and outbound encode.
+  - Worker logs negotiated media encoding in the stream-start message.
+  - Worker auto-detects µ-law frames when 8 kHz 20 ms payloads are 160 bytes.
+- Cloud Run worker deployed as revision `vaani-vobiz-stream-00006-xcd`, health check OK.
+- Next test should be a fresh answered call after revision `00006-xcd`. If STT still fails, collect from Vobiz console:
+  - Call Logs detail page for the Vobiz call id
+  - XML/Application request logs for answer URL and stream status callbacks
+  - Any stream start/media format fields Vobiz exposes (`encoding`, `sampleRate`, `contentType`)
+  - Whether Vobiz force-transcodes streams to PCMU despite requested `audio/x-l16;rate=8000`
