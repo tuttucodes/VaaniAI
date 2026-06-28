@@ -303,3 +303,24 @@ Latest production test after commit `17193d0`:
   - Transcript and latency system notes are stored in Supabase.
 - This is not as low-latency as Gemini Live, but it uses only models currently available to the active Gemini key and should make the demo actually converse.
 - Dograh reference repo was shallow-cloned outside the app repo at `/tmp/vaani-reference-repos/dograh` for architecture reference.
+
+## 2026-06-28 8 kHz Stream Fix + Latest Test
+
+- Vobiz audio-stream docs confirmed the negotiated stream format must exactly match `playAudio`.
+- Previous production test negotiated `audio/x-l16;rate=16000`, while the Gemini TTS helper emits 8 kHz PCM. That mismatch likely caused robotic/broken playback.
+- Patch pushed to GitHub on `main` as `abf732d`:
+  - `lib/public-demo/xml.ts` now negotiates `audio/x-l16;rate=8000` for public demo streams.
+  - `workers/vobiz-stream-agent.ts` has more sensitive RMS VAD thresholds and logs stream diagnostics: frame count, speech-like frame count, max RMS, and processed turns.
+- Cloud Run worker deployed as revision `vaani-vobiz-stream-00004-kgx`, serving 100 percent of traffic.
+- Worker health check returns `{ ok: true, worker: "vobiz-stream-agent", mode: "gemini-orchestrated" }`.
+- Netlify deploy for commit `abf732d` completed successfully.
+- Latest live dental demo call:
+  - App call id: `45726b9d-c82b-41be-8a37-d03e8d132048`
+  - Vobiz call id: `822e5965-98c9-4543-b4fb-33116bcde364`
+  - CDR result: `answer_time=null`, `billsec=0`, `ring_time=52`, `hangup_cause=NO_USER_RESPONSE`, `hangup_source=Carrier`, `total_cost=0`.
+  - Interpretation: this attempt was not answered/reached media, so there was no caller speech to transcribe.
+- Next valid voice test requires the callee to answer the call and speak after the greeting. Then inspect `call_messages` for:
+  - `Vobiz stream started: ... at 8000 Hz`
+  - user transcript row
+  - assistant response row
+  - final diagnostics row: `Vobiz stream closed. Frames=..., speech_like=..., max_rms=..., processed_turns=...`
