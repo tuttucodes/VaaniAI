@@ -7,6 +7,7 @@ export async function POST(request: NextRequest) {
   const url = new URL(request.url);
   const callId = url.searchParams.get("call_id") || "";
   const openingMessageId = url.searchParams.get("opening_message_id") || "";
+  const callerName = (url.searchParams.get("name") || "there").trim().slice(0, 80) || "there";
   const baseUrl = publicBaseUrl(request);
   const streamBaseUrl = process.env.VOBIZ_STREAM_WS_URL || "";
   const supabase = createSupabaseAdminClient();
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest) {
   const streamUrl = new URL(streamBaseUrl);
   streamUrl.searchParams.set("call_id", callId);
   streamUrl.searchParams.set("scenario", "adda247");
-  streamUrl.searchParams.set("name", "there");
+  streamUrl.searchParams.set("name", callerName);
   streamUrl.searchParams.set("use_case", "Adda247 course guidance");
   streamUrl.searchParams.set("opening_message_id", openingMessageId);
 

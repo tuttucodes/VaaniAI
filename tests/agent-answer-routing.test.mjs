@@ -9,5 +9,6 @@ test("Adda247 calls use a dedicated route without changing existing agents", asy
   );
 
   assert.match(route, /searchParams\.set\("scenario",\s*"adda247"\)/);
+  assert.match(route, /searchParams\.set\("name",\s*callerName\)/);
   assert.doesNotMatch(route, /Pearl Dental|scenario",\s*"dental"/);
 });
